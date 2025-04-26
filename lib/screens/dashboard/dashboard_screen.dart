@@ -163,7 +163,6 @@ class DashboardScreen extends StatelessWidget {
                       'Create a job listing',
                       theme.colorScheme.primary,
                       () {
-                        // TODO: Navigate to post job screen
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
