@@ -10,10 +10,30 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final theme = Theme.of(context);
-    // Changed from EMPLOYER to RECRUITER to match registration screen
     final isRecruiter = authProvider.user?.role == 'RECRUITER';
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 600;
+
+    // Show loading indicator while checking auth status
+    if (authProvider.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // If not authenticated, navigate to login
+    if (!authProvider.isAuthenticated) {
+      // Optionally, you can redirect or show a message
+      return const Scaffold(body: Center(child: Text('Not authenticated')));
+    }
+
+    // Display any auth errors
+    if (authProvider.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(authProvider.errorMessage!)));
+        authProvider.clearErrors();
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -21,9 +41,7 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              _showLogoutConfirmationDialog(context);
-            },
+            onPressed: () => _showLogoutConfirmationDialog(context),
             tooltip: 'Logout',
           ),
         ],
@@ -37,7 +55,6 @@ class DashboardScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Greeting Section
                   Text(
                     'Welcome, ${authProvider.user?.username ?? 'User'}!',
                     style: theme.textTheme.headlineSmall,
@@ -53,8 +70,6 @@ class DashboardScreen extends StatelessWidget {
                     maxLines: 2,
                   ),
                   const SizedBox(height: 24),
-
-                  // Stats Section
                   isSmallScreen
                       ? Column(
                         children: [
@@ -103,8 +118,6 @@ class DashboardScreen extends StatelessWidget {
                         ],
                       ),
                   const SizedBox(height: 28),
-
-                  // Main Features Section
                   Text(
                     'Quick Actions',
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -112,98 +125,74 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   if (!isRecruiter) ...[
-                    // Job Seeker Features
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'My Resumes',
                       Icons.description,
                       'Manage your resumes',
                       theme.colorScheme.primary,
-                      () {
-                        Navigator.pushNamed(context, '/resumes');
-                      },
+                      () => Navigator.pushNamed(context, '/resumes'),
                       isSmallScreen,
                     ),
                     const SizedBox(height: 12),
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'Browse Jobs',
                       Icons.work_outline,
                       'Find job opportunities',
                       theme.colorScheme.primary,
-                      () {
-                        Navigator.pushNamed(context, '/jobs');
-                      },
+                      () => Navigator.pushNamed(context, '/jobs'),
                       isSmallScreen,
                     ),
                     const SizedBox(height: 12),
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'My Applications',
                       Icons.send,
                       'Track your job applications',
                       theme.colorScheme.secondary,
-                      () {
-                        Navigator.pushNamed(context, '/applications');
-                      },
+                      () => Navigator.pushNamed(context, '/applications'),
                       isSmallScreen,
                     ),
                   ] else ...[
-                    // Recruiter Features
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'Post New Job',
                       Icons.add_circle_outline,
                       'Create a job listing',
                       theme.colorScheme.primary,
-                      () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Post Job functionality will be implemented soon',
-                            ),
-                          ),
-                        );
-                      },
+                      () => Navigator.pushNamed(context, '/create-job'),
                       isSmallScreen,
                     ),
                     const SizedBox(height: 12),
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'Manage Job Listings',
                       Icons.list_alt,
                       'View and edit your job listings',
                       theme.colorScheme.primary,
-                      () {
-                        Navigator.pushNamed(context, '/jobs');
-                      },
+                      () => Navigator.pushNamed(context, '/jobs'),
                       isSmallScreen,
                     ),
                     const SizedBox(height: 12),
-                    _buildActionCards(
+                    _buildActionCard(
                       context,
                       theme,
                       'Review Applications',
                       Icons.folder_open,
                       'Check applications for your jobs',
                       theme.colorScheme.secondary,
-                      () {
-                        Navigator.pushNamed(context, '/applications');
-                      },
+                      () => Navigator.pushNamed(context, '/applications'),
                       isSmallScreen,
                     ),
                   ],
-
                   const SizedBox(height: 28),
-
-                  // Resources Section
                   Text(
                     'Resources',
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -211,7 +200,7 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildActionCards(
+                  _buildActionCard(
                     context,
                     theme,
                     'Tips & Guides',
@@ -220,16 +209,9 @@ class DashboardScreen extends StatelessWidget {
                         ? 'Hiring best practices'
                         : 'Job search strategies',
                     theme.colorScheme.primary,
-                    () {
-                      // TODO: Navigate to tips screen
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Tips & Guides will be implemented soon',
-                          ),
-                        ),
-                      );
-                    },
+                    () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Feature coming soon')),
+                    ),
                     isSmallScreen,
                   ),
                 ],
@@ -291,7 +273,7 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionCards(
+  Widget _buildActionCard(
     BuildContext context,
     ThemeData theme,
     String title,
@@ -371,9 +353,7 @@ class DashboardScreen extends StatelessWidget {
           actions: <Widget>[
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
               child: const Text('Logout'),

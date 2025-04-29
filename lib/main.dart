@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
+import 'services/api_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -15,17 +16,29 @@ import 'screens/applications/application_list_screen.dart';
 import 'screens/applications/application_detail_screen.dart';
 import 'utils/theme.dart';
 
-void main() {
-  runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final apiService = ApiService();
+  await apiService.init();
+
+  runApp(MyApp(apiService: apiService));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  final ApiService apiService;
+  const MyApp({Key? key, required this.apiService}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
+      providers: [
+        Provider<ApiService>.value(value: apiService),
+
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider(apiService: apiService),
+        ),
+      ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
           return MaterialApp(

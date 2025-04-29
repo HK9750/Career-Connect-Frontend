@@ -3,6 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/logger.dart';
 import 'package:path/path.dart';
 import '../utils/routes.dart';
 import '../models/user.dart';
@@ -12,46 +15,94 @@ import '../models/review.dart';
 import '../models/application.dart';
 
 class ApiService {
-  String? token;
+  String? accessToken;
+  String? refreshToken;
+  bool _isRefreshing = false;
 
-  Map<String, String> _headers() {
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
+  Future<void> init() async {
+    final FlutterSecureStorage storage = const FlutterSecureStorage();
+    accessToken = await storage.read(key: 'accessToken');
+    refreshToken = await storage.read(key: 'refreshToken');
+    print('Access Token from init: $accessToken');
+    print('Refresh Token from init: $refreshToken');
   }
 
-  Future<dynamic> _handleResponse(http.Response response) async {
+  Future<Map<String, String>> _headers() async {
+    await init();
+    final headers = {
+      'Content-Type': 'application/json',
+      if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+      if (refreshToken != null) 'x-refresh-token': refreshToken!,
+    };
+
+    AppLogger.i('API Headers: $headers');
+
+    return headers;
+  }
+
+  Future<dynamic> _handleResponse(
+    http.Response response, {
+    Future<dynamic> Function()? retryFunction,
+    bool isRefreshRequest = false,
+  }) async {
     try {
       final data = json.decode(response.body);
+
+      // Success
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return data;
-      } else {
-        final errorMessage = data['message'] ?? 'Server error occurred';
-        throw ApiException(errorMessage, response.statusCode, data);
       }
+
+      // Unauthorized: try refresh + retry
+      if (response.statusCode == 401 &&
+          !isRefreshRequest &&
+          refreshToken != null &&
+          retryFunction != null) {
+        try {
+          // Refresh tokens (throws on failure)
+          await refreshAuthToken();
+          // Retry original request
+          return await retryFunction();
+        } catch (_) {
+          // If refresh or retry fails, fall through to throwing below
+        }
+      }
+
+      // Any other error
+      final errorMessage = data['message'] ?? 'Server error occurred';
+      throw ApiException(errorMessage, response.statusCode, data);
     } catch (e) {
+      // Re-throw ApiExceptions
       if (e is ApiException) {
         rethrow;
-      } else if (e is FormatException) {
-        throw ApiException('Invalid response format', response.statusCode);
-      } else {
-        throw ApiException('Network error occurred', response.statusCode);
       }
+      // Format error on decode
+      if (e is FormatException) {
+        throw ApiException('Invalid response format', response.statusCode);
+      }
+      // Network / unknown
+      throw ApiException('Network error occurred', response.statusCode);
     }
   }
 
   // AUTH METHODS
   Future<User> login(String email, String password) async {
     try {
+      AppLogger.i("Login attempt with email: $email and password: $password");
       final response = await http.post(
         Uri.parse(ApiRoutes.login),
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode({'email': email, 'password': password}),
       );
       final data = await _handleResponse(response);
-      token = data['accessToken'];
-      return User.fromJson(data['user'], token: data['accessToken']);
+      accessToken = data['accessToken'];
+      refreshToken = data['refreshToken'];
+
+      return User.fromJson(
+        data['user'],
+        accessToken: data['accessToken'],
+        refreshToken: data['refreshToken'],
+      );
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -68,7 +119,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse(ApiRoutes.register),
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode({
           'username': username,
           'email': email,
@@ -77,8 +128,13 @@ class ApiService {
         }),
       );
       final data = await _handleResponse(response);
-      token = data['accessToken'];
-      return User.fromJson(data['user'], token: data['accessToken']);
+      accessToken = data['accessToken'];
+      refreshToken = data['refreshToken'];
+      return User.fromJson(
+        data['user'],
+        accessToken: data['accessToken'],
+        refreshToken: data['refreshToken'],
+      );
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -86,14 +142,80 @@ class ApiService {
     }
   }
 
+  Future<Map<String, String>> refreshAuthToken([String? token]) async {
+    if (_isRefreshing) {
+      // Wait until refresh is completed
+      await Future.delayed(Duration(milliseconds: 500));
+      return {'accessToken': accessToken!, 'refreshToken': refreshToken!};
+    }
+
+    _isRefreshing = true;
+    try {
+      final tokenToUse = token ?? refreshToken;
+      if (tokenToUse == null) {
+        throw ApiException('No refresh token available', 401);
+      }
+
+      final response = await http.post(
+        Uri.parse(ApiRoutes.refreshToken),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'refreshToken': tokenToUse}),
+      );
+
+      final data = await _handleResponse(response, isRefreshRequest: true);
+
+      accessToken = data['accessToken'];
+      refreshToken = data['refreshToken'];
+
+      _isRefreshing = false;
+      return {'accessToken': accessToken!, 'refreshToken': refreshToken!};
+    } catch (e) {
+      _isRefreshing = false;
+      if (e is ApiException) {
+        rethrow;
+      }
+      throw ApiException('Token refresh failed: $e', 500);
+    }
+  }
+
+  Future<bool> refreshAuthTokenIfNeeded() async {
+    try {
+      if (refreshToken != null) {
+        final tokens = await refreshAuthToken();
+        accessToken = tokens['accessToken'];
+        refreshToken = tokens['refreshToken'];
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // RESUME METHODS
   Future<List<Resume>> fetchResumes() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.listResumes),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['resumes'] as List)
+            .map((json) => Resume.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.listResumes),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['resumes'] as List)
           .map((json) => Resume.fromJson(json))
           .toList();
@@ -106,11 +228,27 @@ class ApiService {
 
   Future<List<Resume>> fetchResumesByUser() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.getResumesByUser),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['resumes'] as List)
+            .map((json) => Resume.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.getResumesByUser),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['resumes'] as List)
           .map((json) => Resume.fromJson(json))
           .toList();
@@ -123,11 +261,27 @@ class ApiService {
 
   Future<List<Resume>> fetchResumesByRecruiter() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.getResumesByRecruiter),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['resumes'] as List)
+            .map((json) => Resume.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.getResumesByRecruiter),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['resumes'] as List)
           .map((json) => Resume.fromJson(json))
           .toList();
@@ -140,9 +294,20 @@ class ApiService {
 
   Future<Resume> getResume(String resumeId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(ApiRoutes.getResume.replaceAll('{id}', resumeId));
+        final response = await http.get(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Resume.fromJson(data['resume']);
+      };
+
       final uri = Uri.parse(ApiRoutes.getResume.replaceAll('{id}', resumeId));
-      final response = await http.get(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.get(uri, headers: await _headers());
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Resume.fromJson(data['resume']);
     } on ApiException {
       rethrow;
@@ -159,8 +324,8 @@ class ApiService {
       );
 
       // Add auth header
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
+      if (accessToken != null) {
+        request.headers['Authorization'] = 'Bearer $accessToken';
       }
 
       // Add text fields
@@ -184,8 +349,16 @@ class ApiService {
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      final data = await _handleResponse(response);
 
+      // If unauthorized, try to refresh token and retry
+      if (response.statusCode == 401 && refreshToken != null) {
+        final refreshed = await refreshAuthTokenIfNeeded();
+        if (refreshed) {
+          return await uploadResume(title, file);
+        }
+      }
+
+      final data = await _handleResponse(response);
       return Resume.fromJson(data['resume']);
     } on ApiException {
       rethrow;
@@ -206,8 +379,8 @@ class ApiService {
       );
 
       // Add auth header
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
+      if (accessToken != null) {
+        request.headers['Authorization'] = 'Bearer $accessToken';
       }
 
       // Add text fields
@@ -230,8 +403,16 @@ class ApiService {
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      final data = await _handleResponse(response);
 
+      // If unauthorized, try to refresh token and retry
+      if (response.statusCode == 401 && refreshToken != null) {
+        final refreshed = await refreshAuthTokenIfNeeded();
+        if (refreshed) {
+          return await uploadResumeWeb(title, bytes, fileName);
+        }
+      }
+
+      final data = await _handleResponse(response);
       return Resume.fromJson(data['resume']);
     } on ApiException {
       rethrow;
@@ -242,11 +423,24 @@ class ApiService {
 
   Future<String> downloadResume(String resumeId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.downloadResume.replaceAll('{id}', resumeId),
+        );
+        final response = await http.get(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return data['url'];
+      };
+
       final uri = Uri.parse(
         ApiRoutes.downloadResume.replaceAll('{id}', resumeId),
       );
-      final response = await http.get(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.get(uri, headers: await _headers());
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return data['url'];
     } on ApiException {
       rethrow;
@@ -260,15 +454,33 @@ class ApiService {
     Map<String, dynamic> updateData,
   ) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.updateResume.replaceAll('{id}', resumeId),
+        );
+        final response = await http.put(
+          uri,
+          headers: await _headers(),
+          body: json.encode(updateData),
+        );
+        final data = await _handleResponse(response);
+        return Resume.fromJson(data['resume']);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.updateResume.replaceAll('{id}', resumeId),
       );
       final response = await http.put(
         uri,
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode(updateData),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Resume.fromJson(data['resume']);
     } on ApiException {
       rethrow;
@@ -279,11 +491,25 @@ class ApiService {
 
   Future<Resume> deleteResume(String resumeId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.deleteResume.replaceAll('{id}', resumeId),
+        );
+        final response = await http.delete(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Resume.fromJson(data['resume']);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.deleteResume.replaceAll('{id}', resumeId),
       );
-      final response = await http.delete(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.delete(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Resume.fromJson(data['resume']);
     } on ApiException {
       rethrow;
@@ -295,11 +521,20 @@ class ApiService {
   // ANALYSIS METHODS
   Future<Map<String, dynamic>> analyzeResume(String resumeId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.analyze.replaceAll('{resumeId}', resumeId),
+        );
+        final response = await http.post(uri, headers: await _headers());
+        return await _handleResponse(response);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.analyze.replaceAll('{resumeId}', resumeId),
       );
-      final response = await http.post(uri, headers: _headers());
-      return await _handleResponse(response);
+      final response = await http.post(uri, headers: await _headers());
+
+      return await _handleResponse(response, retryFunction: fetchFunction);
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -310,11 +545,27 @@ class ApiService {
   // JOB METHODS
   Future<List<Job>> fetchJobs() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.listJobs),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['jobs'] as List)
+            .map((json) => Job.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.listJobs),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['jobs'] as List).map((json) => Job.fromJson(json)).toList();
     } on ApiException {
       rethrow;
@@ -325,9 +576,21 @@ class ApiService {
 
   Future<Job> getJob(String jobId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(ApiRoutes.jobDetail.replaceAll('{id}', jobId));
+        final response = await http.get(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Job.fromJson(data['job']);
+      };
+
       final uri = Uri.parse(ApiRoutes.jobDetail.replaceAll('{id}', jobId));
-      final response = await http.get(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.get(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Job.fromJson(data['job']);
     } on ApiException {
       rethrow;
@@ -340,18 +603,43 @@ class ApiService {
     String title,
     String description,
     String company,
+    String? location,
+    String? tags,
   ) async {
     try {
+      final fetchFunction = () async {
+        final response = await http.post(
+          Uri.parse(ApiRoutes.createJob),
+          headers: await _headers(),
+          body: json.encode({
+            'title': title,
+            'description': description,
+            'company': company,
+            'location': location,
+            'tags': tags,
+          }),
+        );
+        final data = await _handleResponse(response);
+        return Job.fromJson(data['job']);
+      };
+
       final response = await http.post(
         Uri.parse(ApiRoutes.createJob),
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode({
           'title': title,
           'description': description,
           'company': company,
+          'location': location,
+          'tags': tags,
         }),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Job.fromJson(data['job']);
     } on ApiException {
       rethrow;
@@ -362,13 +650,29 @@ class ApiService {
 
   Future<Job> updateJob(String jobId, Map<String, dynamic> updateData) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(ApiRoutes.updateJob.replaceAll('{id}', jobId));
+        final response = await http.put(
+          uri,
+          headers: await _headers(),
+          body: json.encode(updateData),
+        );
+        final data = await _handleResponse(response);
+        return Job.fromJson(data['job']);
+      };
+
       final uri = Uri.parse(ApiRoutes.updateJob.replaceAll('{id}', jobId));
       final response = await http.put(
         uri,
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode(updateData),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Job.fromJson(data['job']);
     } on ApiException {
       rethrow;
@@ -379,9 +683,21 @@ class ApiService {
 
   Future<Job> deleteJob(String jobId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(ApiRoutes.deleteJob.replaceAll('{id}', jobId));
+        final response = await http.delete(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Job.fromJson(data['job']);
+      };
+
       final uri = Uri.parse(ApiRoutes.deleteJob.replaceAll('{id}', jobId));
-      final response = await http.delete(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.delete(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Job.fromJson(data['job']);
     } on ApiException {
       rethrow;
@@ -393,15 +709,33 @@ class ApiService {
   // REVIEW METHODS
   Future<Review> submitReview(String resumeId, String comment) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.submitReview.replaceAll('{resumeId}', resumeId),
+        );
+        final response = await http.post(
+          uri,
+          headers: await _headers(),
+          body: json.encode({'comment': comment}),
+        );
+        final data = await _handleResponse(response);
+        return Review.fromJson(data['review']);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.submitReview.replaceAll('{resumeId}', resumeId),
       );
       final response = await http.post(
         uri,
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode({'comment': comment}),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Review.fromJson(data['review']);
     } on ApiException {
       rethrow;
@@ -412,11 +746,27 @@ class ApiService {
 
   Future<List<Review>> fetchReviews(String resumeId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.listReviews.replaceAll('{resumeId}', resumeId),
+        );
+        final response = await http.get(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return (data['reviews'] as List)
+            .map((json) => Review.fromJson(json))
+            .toList();
+      };
+
       final uri = Uri.parse(
         ApiRoutes.listReviews.replaceAll('{resumeId}', resumeId),
       );
-      final response = await http.get(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.get(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['reviews'] as List)
           .map((json) => Review.fromJson(json))
           .toList();
@@ -429,11 +779,25 @@ class ApiService {
 
   Future<Review> deleteReview(String reviewId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.deleteReview.replaceAll('{reviewId}', reviewId),
+        );
+        final response = await http.delete(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Review.fromJson(data['review']);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.deleteReview.replaceAll('{reviewId}', reviewId),
       );
-      final response = await http.delete(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.delete(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Review.fromJson(data['review']);
     } on ApiException {
       rethrow;
@@ -444,11 +808,27 @@ class ApiService {
 
   Future<List<Review>> fetchAllReviews() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.review),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['reviews'] as List)
+            .map((json) => Review.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.review),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['reviews'] as List)
           .map((json) => Review.fromJson(json))
           .toList();
@@ -481,9 +861,23 @@ class ApiService {
   // APPLICATION METHODS
   Future<Application> applyForJob(String jobId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.applyForJob.replaceAll('{jobId}', jobId),
+        );
+        final response = await http.post(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Application.fromJson(data['application']);
+      };
+
       final uri = Uri.parse(ApiRoutes.applyForJob.replaceAll('{jobId}', jobId));
-      final response = await http.post(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.post(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Application.fromJson(data['application']);
     } on ApiException {
       rethrow;
@@ -494,11 +888,25 @@ class ApiService {
 
   Future<Application> getApplication(String applicationId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.getApplication.replaceAll('{applicationId}', applicationId),
+        );
+        final response = await http.get(uri, headers: await _headers());
+        final data = await _handleResponse(response);
+        return Application.fromJson(data['application']);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.getApplication.replaceAll('{applicationId}', applicationId),
       );
-      final response = await http.get(uri, headers: _headers());
-      final data = await _handleResponse(response);
+      final response = await http.get(uri, headers: await _headers());
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return Application.fromJson(data['application']);
     } on ApiException {
       rethrow;
@@ -509,11 +917,27 @@ class ApiService {
 
   Future<List<Application>> listApplicationsByApplicant() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.listByApplicant),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['applications'] as List)
+            .map((json) => Application.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.listByApplicant),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['applications'] as List)
           .map((json) => Application.fromJson(json))
           .toList();
@@ -526,11 +950,27 @@ class ApiService {
 
   Future<List<Application>> listApplicationsByRecruiter() async {
     try {
+      final fetchFunction = () async {
+        final response = await http.get(
+          Uri.parse(ApiRoutes.listByRecruiter),
+          headers: await _headers(),
+        );
+        final data = await _handleResponse(response);
+        return (data['applications'] as List)
+            .map((json) => Application.fromJson(json))
+            .toList();
+      };
+
       final response = await http.get(
         Uri.parse(ApiRoutes.listByRecruiter),
-        headers: _headers(),
+        headers: await _headers(),
       );
-      final data = await _handleResponse(response);
+
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
+
       return (data['applications'] as List)
           .map((json) => Application.fromJson(json))
           .toList();
@@ -546,7 +986,7 @@ class ApiService {
     String status,
   ) async {
     try {
-      // Validate status
+      // Define valid statuses
       final validStatuses = ['APPLIED', 'REVIEWED', 'ACCEPTED', 'REJECTED'];
       if (!validStatuses.contains(status)) {
         throw ApiException(
@@ -554,6 +994,23 @@ class ApiService {
           400,
         );
       }
+
+      // Define retryable fetch function
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.updateApplicationStatus.replaceAll(
+            '{applicationId}',
+            applicationId,
+          ),
+        );
+        final response = await http.put(
+          uri,
+          headers: await _headers(),
+          body: json.encode({'status': status}),
+        );
+        final data = await _handleResponse(response);
+        return Application.fromJson(data['application']);
+      };
 
       final uri = Uri.parse(
         ApiRoutes.updateApplicationStatus.replaceAll(
@@ -563,10 +1020,13 @@ class ApiService {
       );
       final response = await http.put(
         uri,
-        headers: _headers(),
+        headers: await _headers(),
         body: json.encode({'status': status}),
       );
-      final data = await _handleResponse(response);
+      final data = await _handleResponse(
+        response,
+        retryFunction: fetchFunction,
+      );
       return Application.fromJson(data['application']);
     } on ApiException {
       rethrow;
@@ -577,14 +1037,26 @@ class ApiService {
 
   Future<Map<String, dynamic>> deleteApplication(String applicationId) async {
     try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(
+          ApiRoutes.deleteApplication.replaceAll(
+            '{applicationId}',
+            applicationId,
+          ),
+        );
+        final response = await http.delete(uri, headers: await _headers());
+        return await _handleResponse(response);
+      };
+
       final uri = Uri.parse(
         ApiRoutes.deleteApplication.replaceAll(
           '{applicationId}',
           applicationId,
         ),
       );
-      final response = await http.delete(uri, headers: _headers());
-      return await _handleResponse(response);
+      final response = await http.delete(uri, headers: await _headers());
+
+      return await _handleResponse(response, retryFunction: fetchFunction);
     } on ApiException {
       rethrow;
     } catch (e) {

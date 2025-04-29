@@ -5,6 +5,7 @@ class ApiRoutes {
   static const auth = '${Constants.baseUrl}/auth';
   static const login = '$auth/login';
   static const register = '$auth/register';
+  static const refreshToken = '$auth/refresh-token';
 
   static const job = '${Constants.baseUrl}/job';
   static const listJobs = '$job';

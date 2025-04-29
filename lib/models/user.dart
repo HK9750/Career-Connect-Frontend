@@ -7,7 +7,8 @@ class User {
   final String username;
   final String email;
   final String role;
-  final String token;
+  final String accessToken;
+  final String refreshToken;
   final DateTime createdAt;
 
   User({
@@ -15,17 +16,23 @@ class User {
     required this.username,
     required this.email,
     required this.role,
-    required this.token,
+    required this.accessToken,
+    required this.refreshToken,
     required this.createdAt,
   });
 
-  factory User.fromJson(Map<String, dynamic> json, {String? token}) {
+  factory User.fromJson(
+    Map<String, dynamic> json, {
+    String? accessToken,
+    String? refreshToken,
+  }) {
     return User(
       id: json['id'],
       username: json['username'],
       email: json['email'],
       role: json['role'],
-      token: token ?? '',
+      accessToken: accessToken ?? json['accessToken'] ?? '',
+      refreshToken: refreshToken ?? json['refreshToken'] ?? '',
       createdAt:
           json['createdAt'] != null
               ? DateTime.parse(json['createdAt'])
@@ -40,7 +47,8 @@ class User {
       username: json['username'],
       email: json['email'],
       role: json['role'],
-      token: json['token'],
+      accessToken: json['accessToken'],
+      refreshToken: json['refreshToken'],
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
@@ -51,7 +59,9 @@ class User {
       'username': username,
       'email': email,
       'role': role,
-      'token': token,
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      'createdAt': createdAt.toIso8601String(),
     });
   }
 
