@@ -1,6 +1,15 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_selector/file_selector.dart';
+
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
+import '../../services/api_service.dart';
+import '../../models/resume.dart';
+import '../../utils/theme.dart';
 
 class UploadResumeScreen extends StatefulWidget {
   const UploadResumeScreen({Key? key}) : super(key: key);
@@ -12,9 +21,14 @@ class UploadResumeScreen extends StatefulWidget {
 class _UploadResumeScreenState extends State<UploadResumeScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  String? _selectedFile;
+  final _apiService = ApiService();
+
+  File? _selectedFile;
+  Uint8List? _webFileBytes;
+  String? _fileName;
   bool _isUploading = false;
   int _activeStep = 0;
+  Resume? _uploadedResume;
 
   @override
   void dispose() {
@@ -22,49 +36,107 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
     super.dispose();
   }
 
-  void _selectFile() {
-    // Simulate file selection
-    setState(() {
-      _selectedFile = 'JohnDoe_Resume.pdf';
-    });
+  Future<void> _pickFile() async {
+    try {
+      final documentType = XTypeGroup(
+        label: 'documents',
+        extensions: ['pdf', 'docx'],
+        mimeTypes: [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+      );
+
+      final XFile? file = await openFile(acceptedTypeGroups: [documentType]);
+      if (file == null) return; // user cancelled
+
+      setState(() => _fileName = file.name);
+
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        setState(() => _webFileBytes = bytes);
+      } else {
+        setState(() => _selectedFile = File(file.path));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
+    }
+  }
+
+  String _getFileSize() {
+    if (kIsWeb && _webFileBytes != null) {
+      final kb = _webFileBytes!.length / 1024;
+      return '${kb.toStringAsFixed(1)} KB';
+    } else if (_selectedFile != null) {
+      final kb = _selectedFile!.lengthSync() / 1024;
+      return '${kb.toStringAsFixed(0)} KB';
+    }
+    return '';
+  }
+
+  IconData _getFileIcon() {
+    if (_fileName == null) return Icons.insert_drive_file;
+    final ext = _fileName!.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      default:
+        return Icons.insert_drive_file;
+    }
   }
 
   Future<void> _uploadResume() async {
-    if (_formKey.currentState!.validate() && _selectedFile != null) {
-      setState(() {
-        _isUploading = true;
-      });
-
-      // Simulate API request
-      await Future.delayed(const Duration(seconds: 2));
-
-      setState(() {
-        _isUploading = false;
-        _activeStep = 1; // Move to success step
-      });
-    } else if (_selectedFile == null) {
+    if (!_formKey.currentState!.validate() ||
+        (_selectedFile == null && _webFileBytes == null)) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please select a file')));
+      return;
+    }
+
+    setState(() => _isUploading = true);
+
+    try {
+      // always call uploadResume; inside ApiService you can detect kIsWeb
+      _uploadedResume = await _apiService.uploadResume(
+        _titleController.text,
+        // if web, wrap bytes in a temporary file or use a separate uploadResumeWeb
+        // but ideally your ApiService.uploadResume handles both
+        _selectedFile!,
+      );
+
+      setState(() => _activeStep = 1);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error uploading resume: $e')));
+    } finally {
+      setState(() => _isUploading = false);
     }
   }
 
   void _goToNextStep() {
-    // Navigate back to job listings or to another screen
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload Resume')),
+      backgroundColor: AppTheme.lightBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Upload Resume'),
+        backgroundColor: AppTheme.primaryColor,
+      ),
       body: _activeStep == 0 ? _buildUploadForm() : _buildSuccessScreen(),
     );
   }
 
   Widget _buildUploadForm() {
-    final theme = Theme.of(context);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Form(
@@ -72,11 +144,14 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Upload Your Resume', style: theme.textTheme.headlineMedium),
+            Text(
+              'Upload Your Resume',
+              style: AppTheme.lightTheme.textTheme.headlineMedium,
+            ),
             const SizedBox(height: 8),
             Text(
-              'Upload your resume to apply for jobs. We support PDF, DOCX, and TXT formats.',
-              style: theme.textTheme.bodyLarge,
+              'We support PDF and DOCX formats.',
+              style: AppTheme.lightTheme.textTheme.bodyLarge,
             ),
             const SizedBox(height: 32),
 
@@ -86,134 +161,40 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
               hintText: 'Resume Title',
               labelText: 'Title',
               prefixIcon: Icons.title,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a title for your resume';
-                }
-                return null;
-              },
+              validator:
+                  (value) =>
+                      (value == null || value.isEmpty)
+                          ? 'Please enter a title'
+                          : null,
             ),
             const SizedBox(height: 24),
 
-            // File Upload Section
-            Text('Upload File', style: theme.textTheme.titleMedium),
+            // File upload section
+            Text(
+              'Upload File',
+              style: AppTheme.lightTheme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Card(
+              color: AppTheme.cardColor,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
-                  color: theme.colorScheme.primary.withOpacity(0.2),
+                  color: AppTheme.accentColor.withOpacity(0.2),
                   width: 1,
                 ),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    if (_selectedFile == null) ...[
-                      // File selection prompt
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withOpacity(0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.cloud_upload_outlined,
-                              size: 48,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Drag and drop your file here',
-                              style: theme.textTheme.bodyLarge,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'or',
-                              style: theme.textTheme.bodyMedium,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.file_present),
-                              label: const Text('Browse Files'),
-                              onPressed: _selectFile,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Supported formats: PDF, DOCX, TXT (Max size: 5MB)',
-                        style: theme.textTheme.bodySmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ] else ...[
-                      // Selected file display
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.picture_as_pdf,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _selectedFile!,
-                                  style: theme.textTheme.titleMedium,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '245 KB',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _selectedFile = null;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
+                child:
+                    _selectedFile == null && _webFileBytes == null
+                        ? _buildFilePrompt()
+                        : _buildFilePreview(),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Your resume will be parsed automatically to extract information such as education, work experience, and skills.',
-              style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 32),
 
-            // Upload Button
+            // Upload button
             CustomButton(
               text: 'Upload Resume',
               icon: Icons.upload_file,
@@ -226,9 +207,97 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
     );
   }
 
-  Widget _buildSuccessScreen() {
-    final theme = Theme.of(context);
+  Widget _buildFilePrompt() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppTheme.accentColor.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppTheme.accentColor.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.upload_file, size: 48, color: AppTheme.accentColor),
+              const SizedBox(height: 16),
+              Text(
+                'Select a file from your device',
+                style: AppTheme.lightTheme.textTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.file_present),
+                label: const Text('Browse Files'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 20,
+                  ),
+                ),
+                onPressed: _pickFile,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Supported formats: PDF, DOCX (Max size: 5MB)',
+          style: AppTheme.lightTheme.textTheme.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
 
+  Widget _buildFilePreview() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.accentColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(_getFileIcon(), color: AppTheme.accentColor),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _fileName ?? 'Selected File',
+                style: AppTheme.lightTheme.textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                _getFileSize(),
+                style: AppTheme.lightTheme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
+          onPressed:
+              () => setState(() {
+                _selectedFile = null;
+                _webFileBytes = null;
+                _fileName = null;
+              }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuccessScreen() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -238,31 +307,25 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.1),
+                color: AppTheme.successColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.check_circle_outline,
                 size: 64,
-                color: theme.colorScheme.primary,
+                color: AppTheme.successColor,
               ),
             ),
             const SizedBox(height: 24),
             Text(
               'Resume Uploaded Successfully!',
-              style: theme.textTheme.headlineSmall,
+              style: AppTheme.lightTheme.textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             Text(
-              'Your resume "${_titleController.text}" has been uploaded and added to your profile.',
-              style: theme.textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'We\'ve automatically parsed your resume to extract education, experience, and skills, which you can edit in your profile.',
-              style: theme.textTheme.bodyMedium,
+              'Your resume "${_titleController.text}" has been uploaded.',
+              style: AppTheme.lightTheme.textTheme.bodyLarge,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -270,17 +333,6 @@ class _UploadResumeScreenState extends State<UploadResumeScreen> {
               text: 'View Job Listings',
               icon: Icons.work_outline,
               onPressed: _goToNextStep,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _activeStep = 0;
-                  _selectedFile = null;
-                  _titleController.clear();
-                });
-              },
-              child: const Text('Upload Another Resume'),
             ),
           ],
         ),

@@ -233,7 +233,15 @@ class ApiService {
           Uri.parse(ApiRoutes.getResumesByUser),
           headers: await _headers(),
         );
+
         final data = await _handleResponse(response);
+        print('Raw API data: $data'); // Debugging the raw response data
+
+        // Add a check to handle cases where 'resumes' might be null or empty
+        if (data['resumes'] == null) {
+          throw ApiException('No resumes found for the user.', 404);
+        }
+
         return (data['resumes'] as List)
             .map((json) => Resume.fromJson(json))
             .toList();
@@ -249,12 +257,20 @@ class ApiService {
         retryFunction: fetchFunction,
       );
 
+      print('Raw API data: $data'); // Debugging the raw response data
+
+      // Check for null 'resumes' field
+      if (data['resumes'] == null) {
+        throw ApiException('No resumes found for the user.', 404);
+      }
+
       return (data['resumes'] as List)
           .map((json) => Resume.fromJson(json))
           .toList();
     } on ApiException {
       rethrow;
     } catch (e) {
+      print('Error in fetchResumesByUser: $e');
       throw ApiException('Failed to load user resumes: $e', 500);
     }
   }
@@ -323,23 +339,24 @@ class ApiService {
         Uri.parse(ApiRoutes.uploadResume),
       );
 
-      // Add auth header
+      // add your common headers
+      request.headers.addAll(await _headers());
       if (accessToken != null) {
         request.headers['Authorization'] = 'Bearer $accessToken';
       }
 
-      // Add text fields
+      // text fields
       request.fields['title'] = title;
 
-      // Determine file type
-      final fileExtension = extension(file.path).toLowerCase();
-      _validateFileType(fileExtension);
-      String contentType = _getContentType(fileExtension);
+      // validate & figure out mime
+      final fileExt = extension(file.path).toLowerCase();
+      _validateFileType(fileExt);
+      final contentType = _getContentType(fileExt);
 
-      // Add file
+      // **NOTICE** fieldname is now 'resume'
       request.files.add(
         http.MultipartFile(
-          'file',
+          'resume',
           file.readAsBytes().asStream(),
           file.lengthSync(),
           filename: basename(file.path),
@@ -350,10 +367,10 @@ class ApiService {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      // If unauthorized, try to refresh token and retry
+      // handle 401 retry ...
       if (response.statusCode == 401 && refreshToken != null) {
-        final refreshed = await refreshAuthTokenIfNeeded();
-        if (refreshed) {
+        final didRefresh = await refreshAuthTokenIfNeeded();
+        if (didRefresh) {
           return await uploadResume(title, file);
         }
       }
@@ -604,7 +621,7 @@ class ApiService {
     String description,
     String company,
     String? location,
-    String? tags,
+    List<String>? tags,
   ) async {
     try {
       final fetchFunction = () async {

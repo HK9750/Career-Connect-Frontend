@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:frontend/screens/jobs/create_job_screen.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
 import 'services/api_service.dart';
@@ -57,6 +58,7 @@ class MyApp extends StatelessWidget {
               '/resumes/upload': (context) => const UploadResumeScreen(),
               '/jobs': (context) => const JobListScreen(),
               '/jobs/detail': (context) => const JobDetailScreen(),
+              '/create-job': (context) => const CreateJobScreen(),
               '/applications': (context) => const ApplicationListScreen(),
               '/applications/detail':
                   (context) => const ApplicationDetailScreen(),

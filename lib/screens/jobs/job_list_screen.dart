@@ -140,7 +140,11 @@ class _JobListScreenState extends State<JobListScreen> {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => JobDetailScreen()),
+            MaterialPageRoute(
+              builder: (context) => const JobDetailScreen(),
+              // Pass the job id as an argument
+              settings: RouteSettings(arguments: job.id),
+            ),
           ).then((_) {
             // Refresh jobs list when returning from detail screen
             setState(() {

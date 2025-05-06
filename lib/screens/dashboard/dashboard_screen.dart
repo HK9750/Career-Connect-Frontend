@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
-import '../../widgets/custom_card.dart';
+import '../../utils/theme.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -21,7 +21,6 @@ class DashboardScreen extends StatelessWidget {
 
     // If not authenticated, navigate to login
     if (!authProvider.isAuthenticated) {
-      // Optionally, you can redirect or show a message
       return const Scaffold(body: Center(child: Text('Not authenticated')));
     }
 
@@ -129,11 +128,22 @@ class DashboardScreen extends StatelessWidget {
                     _buildActionCard(
                       context,
                       theme,
-                      'My Resumes',
+                      'View Resumes',
                       Icons.description,
-                      'Manage your resumes',
-                      theme.colorScheme.primary,
+                      'Manage your existing resumes',
+                      AppTheme.accentColor,
                       () => Navigator.pushNamed(context, '/resumes'),
+                      isSmallScreen,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildActionCard(
+                      context,
+                      theme,
+                      'Upload Resume',
+                      Icons.upload_file,
+                      'Add a new resume to your profile',
+                      AppTheme.accentColor,
+                      () => Navigator.pushNamed(context, '/resumes/upload'),
                       isSmallScreen,
                     ),
                     const SizedBox(height: 12),
@@ -143,7 +153,7 @@ class DashboardScreen extends StatelessWidget {
                       'Browse Jobs',
                       Icons.work_outline,
                       'Find job opportunities',
-                      theme.colorScheme.primary,
+                      AppTheme.primaryColor,
                       () => Navigator.pushNamed(context, '/jobs'),
                       isSmallScreen,
                     ),
@@ -154,7 +164,7 @@ class DashboardScreen extends StatelessWidget {
                       'My Applications',
                       Icons.send,
                       'Track your job applications',
-                      theme.colorScheme.secondary,
+                      AppTheme.secondaryColor,
                       () => Navigator.pushNamed(context, '/applications'),
                       isSmallScreen,
                     ),
@@ -165,7 +175,7 @@ class DashboardScreen extends StatelessWidget {
                       'Post New Job',
                       Icons.add_circle_outline,
                       'Create a job listing',
-                      theme.colorScheme.primary,
+                      AppTheme.accentColor,
                       () => Navigator.pushNamed(context, '/create-job'),
                       isSmallScreen,
                     ),
@@ -176,7 +186,7 @@ class DashboardScreen extends StatelessWidget {
                       'Manage Job Listings',
                       Icons.list_alt,
                       'View and edit your job listings',
-                      theme.colorScheme.primary,
+                      AppTheme.primaryColor,
                       () => Navigator.pushNamed(context, '/jobs'),
                       isSmallScreen,
                     ),
@@ -187,33 +197,11 @@ class DashboardScreen extends StatelessWidget {
                       'Review Applications',
                       Icons.folder_open,
                       'Check applications for your jobs',
-                      theme.colorScheme.secondary,
+                      AppTheme.secondaryColor,
                       () => Navigator.pushNamed(context, '/applications'),
                       isSmallScreen,
                     ),
                   ],
-                  const SizedBox(height: 28),
-                  Text(
-                    'Resources',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildActionCard(
-                    context,
-                    theme,
-                    'Tips & Guides',
-                    Icons.lightbulb_outline,
-                    isRecruiter
-                        ? 'Hiring best practices'
-                        : 'Job search strategies',
-                    theme.colorScheme.primary,
-                    () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Feature coming soon')),
-                    ),
-                    isSmallScreen,
-                  ),
                 ],
               ),
             ),
@@ -344,6 +332,7 @@ class DashboardScreen extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
+        final theme = Theme.of(context);
         return AlertDialog(
           title: const Text('Confirm Logout'),
           content: const Text('Are you sure you want to logout?'),
@@ -352,11 +341,17 @@ class DashboardScreen extends StatelessWidget {
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Cancel'),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppTheme.accentColor),
+              ),
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
-              child: const Text('Logout'),
+              child: Text(
+                'Logout',
+                style: TextStyle(color: AppTheme.accentColor),
+              ),
               onPressed: () {
                 final authProvider = Provider.of<AuthProvider>(
                   context,

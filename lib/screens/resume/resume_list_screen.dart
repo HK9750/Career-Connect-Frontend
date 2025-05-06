@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/utils/logger.dart';
 import '../../widgets/custom_button.dart';
+import '../../models/resume.dart';
+import '../../services/api_service.dart';
 
 class ResumeListScreen extends StatefulWidget {
   const ResumeListScreen({Key? key}) : super(key: key);
@@ -9,30 +12,8 @@ class ResumeListScreen extends StatefulWidget {
 }
 
 class _ResumeListScreenState extends State<ResumeListScreen> {
-  final List<Map<String, dynamic>> _mockResumes = [
-    {
-      'id': '1',
-      'title': 'Software Developer Resume',
-      'createdAt': '2025-02-15',
-      'lastUpdated': '2025-04-20',
-      'applications': 3,
-    },
-    {
-      'id': '2',
-      'title': 'Front-end Developer Resume',
-      'createdAt': '2025-03-05',
-      'lastUpdated': '2025-04-15',
-      'applications': 2,
-    },
-    {
-      'id': '3',
-      'title': 'Mobile Developer Resume',
-      'createdAt': '2025-04-01',
-      'lastUpdated': '2025-04-01',
-      'applications': 0,
-    },
-  ];
-
+  final ApiService _apiService = ApiService();
+  List<Resume> _resumes = [];
   bool _isLoading = false;
 
   @override
@@ -41,23 +22,34 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
     _loadResumes();
   }
 
+  // Modified _loadResumes method with better logging and error handling
   Future<void> _loadResumes() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
+    try {
+      // Add debug print to see what's happening before the API call
+      print('Starting to fetch resumes...');
 
-    // Simulate API request
-    await Future.delayed(const Duration(milliseconds: 800));
+      final List<Resume> fetched = await _apiService.fetchResumesByUser();
 
-    // TODO: Replace with actual API call
-    // final resumes = await resumeService.getResumes();
-    // setState(() {
-    //   _resumes = resumes;
-    // });
+      // Debug print to see the raw response
+      print('API Response received: ${fetched.length} resumes');
+      if (fetched.isNotEmpty) {
+        print('First resume: ${fetched.first.toString()}');
+      }
 
-    setState(() {
-      _isLoading = false;
-    });
+      setState(() => _resumes = fetched);
+      AppLogger.i('Fetched resumes: ${_resumes.length}');
+    } catch (e, stackTrace) {
+      // Improved error logging with stack trace
+      print('Error fetching resumes: $e');
+      print('Stack trace: $stackTrace');
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load resumes: $e')));
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _refreshResumes() async {
@@ -76,14 +68,16 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
               : RefreshIndicator(
                 onRefresh: _refreshResumes,
                 child:
-                    _mockResumes.isEmpty
+                    _resumes.isEmpty
                         ? _buildEmptyState(theme)
                         : _buildResumeList(theme),
               ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.pushNamed(context, '/resumes/upload');
-        },
+        onPressed:
+            () => Navigator.pushNamed(
+              context,
+              '/resumes/upload',
+            ).then((_) => _loadResumes()),
         icon: const Icon(Icons.add),
         label: const Text('New Resume'),
       ),
@@ -111,9 +105,11 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
           CustomButton(
             text: 'Create Resume',
             icon: Icons.add,
-            onPressed: () {
-              Navigator.pushNamed(context, '/resumes/upload');
-            },
+            onPressed:
+                () => Navigator.pushNamed(
+                  context,
+                  '/resumes/upload',
+                ).then((_) => _loadResumes()),
           ),
         ],
       ),
@@ -123,9 +119,9 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
   Widget _buildResumeList(ThemeData theme) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _mockResumes.length,
+      itemCount: _resumes.length,
       itemBuilder: (context, index) {
-        final resume = _mockResumes[index];
+        final resume = _resumes[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
           shape: RoundedRectangleBorder(
@@ -133,13 +129,12 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              Navigator.pushNamed(
-                context,
-                '/resumes/detail',
-                arguments: {'resumeId': resume['id']},
-              );
-            },
+            onTap:
+                () => Navigator.pushNamed(
+                  context,
+                  '/resumes/detail',
+                  arguments: {'resumeId': resume.id.toString()},
+                ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -151,41 +146,19 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          resume['title'],
+                          resume.title ?? 'Untitled',
                           style: theme.textTheme.titleLarge,
                         ),
                       ),
                       PopupMenuButton<String>(
                         onSelected: (value) {
-                          if (value == 'edit') {
-                            // TODO: Navigate to edit screen
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Edit functionality will be implemented soon',
-                                ),
-                              ),
-                            );
-                          } else if (value == 'delete') {
-                            _showDeleteConfirmationDialog(
-                              context,
-                              resume['id'],
-                            );
+                          if (value == 'delete') {
+                            _confirmDelete(resume.id);
                           }
                         },
                         itemBuilder:
-                            (BuildContext context) => [
-                              const PopupMenuItem<String>(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit),
-                                    SizedBox(width: 8),
-                                    Text('Edit'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem<String>(
+                            (_) => [
+                              const PopupMenuItem(
                                 value: 'delete',
                                 child: Row(
                                   children: [
@@ -213,27 +186,17 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
                           children: [
                             Text('Created', style: theme.textTheme.bodySmall),
                             Text(
-                              resume['createdAt'],
+                              resume.createdAt
+                                  .toLocal()
+                                  .toIso8601String()
+                                  .split('T')
+                                  .first,
                               style: theme.textTheme.bodyMedium,
                             ),
                           ],
                         ),
                       ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Last Updated',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            Text(
-                              resume['lastUpdated'],
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      ),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,7 +206,7 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
                               style: theme.textTheme.bodySmall,
                             ),
                             Text(
-                              resume['applications'].toString(),
+                              resume.applications?.length.toString() ?? '0',
                               style: theme.textTheme.bodyMedium,
                             ),
                           ],
@@ -260,45 +223,41 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
     );
   }
 
-  Future<void> _showDeleteConfirmationDialog(
-    BuildContext context,
-    String resumeId,
-  ) async {
-    return showDialog<void>(
+  void _confirmDelete(int id) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Confirm Delete'),
-          content: const Text(
-            'Are you sure you want to delete this resume? This action cannot be undone.',
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Delete Resume'),
+            content: const Text('Are you sure you want to delete this resume?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
-              onPressed: () {
-                // TODO: Implement delete functionality
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Resume deleted successfully')),
-                );
-                // After successful deletion
-                setState(() {
-                  _mockResumes.removeWhere(
-                    (element) => element['id'] == resumeId,
-                  );
-                });
-              },
-            ),
-          ],
-        );
-      },
     );
+    if (confirmed == true) {
+      try {
+        await _apiService.deleteResume(id.toString());
+        setState(() => _resumes.removeWhere((r) => r.id == id));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Resume deleted')));
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: \$e')));
+      }
+    }
   }
 }

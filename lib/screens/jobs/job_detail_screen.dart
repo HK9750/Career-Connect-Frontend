@@ -17,26 +17,36 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   late Future<Job> _jobFuture;
   final ApiService _apiService = ApiService();
   bool _isApplying = false;
-  late int jobId;
+  int? jobId;
 
   @override
-  void initState() {
-    super.initState();
-    jobId = ModalRoute.of(context)!.settings.arguments as int;
-    _loadJob();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Move from initState to didChangeDependencies to ensure context is available
+    if (jobId == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args != null && args is int) {
+        jobId = args;
+        _loadJob();
+      }
+    }
   }
 
   void _loadJob() {
-    _jobFuture = _apiService.getJob(jobId.toString());
+    if (jobId != null) {
+      _jobFuture = _apiService.getJob(jobId.toString());
+    }
   }
 
   Future<void> _applyForJob() async {
+    if (jobId == null) return;
+
     setState(() {
       _isApplying = true;
     });
 
     try {
-      final application = await _apiService.applyForJob(jobId.toString());
+      await _apiService.applyForJob(jobId.toString());
 
       if (!mounted) return;
 
@@ -50,7 +60,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       // Navigate to application detail
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ApplicationListScreen()),
+        MaterialPageRoute(builder: (context) => const ApplicationListScreen()),
       );
     } catch (e) {
       if (!mounted) return;
@@ -72,6 +82,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (jobId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Job Details')),
+        body: const Center(child: Text('Job ID not provided')),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Job Details')),
       body: FutureBuilder<Job>(
@@ -96,15 +113,18 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           }
         },
       ),
-      bottomNavigationBar: FutureBuilder<Job>(
-        future: _jobFuture,
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return _buildApplyButton();
-          }
-          return const SizedBox.shrink();
-        },
-      ),
+      bottomNavigationBar:
+          jobId != null
+              ? FutureBuilder<Job>(
+                future: _jobFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return _buildApplyButton();
+                  }
+                  return const SizedBox.shrink();
+                },
+              )
+              : null,
     );
   }
 
@@ -240,11 +260,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       ),
       child: ElevatedButton(
         onPressed: _isApplying ? null : _applyForJob,
+        style: Theme.of(context).elevatedButtonTheme.style,
         child:
             _isApplying
                 ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
+                  children: [
                     SizedBox(
                       width: 20,
                       height: 20,
@@ -253,7 +274,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         strokeWidth: 2,
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Text('Applying...'),
                   ],
                 )
