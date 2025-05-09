@@ -18,7 +18,7 @@ class ApplicationDetailScreen extends StatefulWidget {
 }
 
 class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
-  late Future<Application> _applicationFuture;
+  Future<Application>? _applicationFuture;
   final ApiService _apiService = ApiService();
   bool _isProcessing = false;
   late int applicationId;
@@ -27,16 +27,20 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   final bool _isRecruiter = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      applicationId = ModalRoute.of(context)!.settings.arguments as int;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Get applicationId from route arguments
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is int) {
+      applicationId = args;
       _loadApplication();
-    });
+    }
   }
 
   void _loadApplication() {
-    _applicationFuture = _apiService.getApplication(applicationId.toString());
+    setState(() {
+      _applicationFuture = _apiService.getApplication(applicationId.toString());
+    });
   }
 
   Future<void> _updateStatus(String status) async {
@@ -163,140 +167,158 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
             ),
         ],
       ),
-      body: FutureBuilder<Application>(
-        future: _applicationFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingIndicator();
-          } else if (snapshot.hasError) {
-            return ErrorView(
-              error: snapshot.error.toString(),
-              onRetry: _loadApplication,
-            );
-          } else if (!snapshot.hasData) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: AppTheme.warningColor,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Application not found',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Go Back'),
-                  ),
-                ],
-              ),
-            );
-          }
+      body:
+          _applicationFuture == null
+              ? const Center(child: Text('Application ID not provided'))
+              : FutureBuilder<Application>(
+                future: _applicationFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const LoadingIndicator();
+                  } else if (snapshot.hasError) {
+                    return ErrorView(
+                      error: snapshot.error.toString(),
+                      onRetry: _loadApplication,
+                    );
+                  } else if (!snapshot.hasData) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: AppTheme.warningColor,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Application not found',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Go Back'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
 
-          final app = snapshot.data!;
+                  final app = snapshot.data!;
 
-          if (_isProcessing) {
-            return const LoadingIndicator(text: 'Processing...');
-          }
+                  if (_isProcessing) {
+                    return const LoadingIndicator(text: 'Processing...');
+                  }
 
-          return Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppTheme.primaryColor.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Job Title and Status Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
+                  return Container(
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardTheme.color,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          spreadRadius: 1,
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          app.jobTitle,
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.business,
-                              size: 18,
-                              color: AppTheme.subtitleColor,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildStatusBadge(app.statusLabel),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Job Details
-                  _buildJobDetails(app),
-
-                  const SizedBox(height: 24),
-
-                  // Recruiter-specific sections
-                  if (_isRecruiter) ...[
-                    _buildApplicantInfo(app),
-                    const SizedBox(height: 24),
-                    _buildRecruiterActions(app),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Additional Info
-                  _buildAdditionalInfo(app),
-
-                  // Footer space
-                  const SizedBox(height: 32),
-
-                  // Withdraw button for applicants
-                  if (!_isRecruiter)
-                    Center(
-                      child: OutlinedButton.icon(
-                        onPressed: _confirmWithdraw,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Withdraw Application'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.errorColor,
-                          side: const BorderSide(color: AppTheme.errorColor),
-                        ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.primaryColor.withOpacity(0.05),
+                          Colors.transparent,
+                        ],
                       ),
                     ),
-                ],
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Job Title and Status Header
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardTheme.color,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  spreadRadius: 1,
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  app.jobTitle,
+                                  style:
+                                      Theme.of(
+                                        context,
+                                      ).textTheme.headlineMedium,
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.business,
+                                      size: 18,
+                                      color: AppTheme.subtitleColor,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Add company name if available in your model
+                                    Text(
+                                      app.jobLocation,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium!.copyWith(
+                                        color: AppTheme.subtitleColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _buildStatusBadge(app.statusLabel),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Job Details
+                          _buildJobDetails(app),
+
+                          const SizedBox(height: 24),
+
+                          // Recruiter-specific sections
+                          if (_isRecruiter) ...[
+                            _buildApplicantInfo(app),
+                            const SizedBox(height: 24),
+                            _buildRecruiterActions(app),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Additional Info
+                          _buildAdditionalInfo(app),
+
+                          // Footer space
+                          const SizedBox(height: 32),
+
+                          // Withdraw button for applicants
+                          if (!_isRecruiter)
+                            Center(
+                              child: OutlinedButton.icon(
+                                onPressed: _confirmWithdraw,
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Withdraw Application'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.errorColor,
+                                  side: const BorderSide(
+                                    color: AppTheme.errorColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -400,6 +422,11 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   }
 
   Widget _buildApplicantInfo(Application app) {
+    // Check if applicant info is available
+    if (app.applicant == null) {
+      return const SizedBox.shrink();
+    }
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -428,7 +455,9 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                   radius: 24,
                   backgroundColor: AppTheme.primaryColor,
                   child: Text(
-                    app.applicant!.username.substring(0, 1).toUpperCase(),
+                    app.applicant!.username.isNotEmpty
+                        ? app.applicant!.username.substring(0, 1).toUpperCase()
+                        : 'U',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -458,7 +487,10 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
-              onPressed: () => _downloadResume(app.resumeUrl),
+              onPressed:
+                  app.resumeUrl.isNotEmpty
+                      ? () => _downloadResume(app.resumeUrl)
+                      : null,
               icon: const Icon(Icons.download),
               label: const Text('Download Resume'),
               style: ElevatedButton.styleFrom(
@@ -555,7 +587,9 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).cardTheme.color?.withOpacity(0.5),
+                color:
+                    Theme.of(context).cardTheme.color?.withOpacity(0.5) ??
+                    Colors.white.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey.withOpacity(0.2)),
               ),

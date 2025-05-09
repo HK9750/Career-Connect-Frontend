@@ -53,6 +53,34 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
     return applications.where((app) => app.status == status).toList();
   }
 
+  void _navigateToApplicationDetail(Application application) {
+    if (application.id == null) {
+      // Show an error message if ID is missing
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot view application details: Application ID is missing',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ApplicationDetailScreen(),
+        settings: RouteSettings(arguments: application.id),
+      ),
+    ).then((_) {
+      // Refresh applications when returning from detail screen
+      setState(() {
+        _loadApplications();
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -190,6 +218,8 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
         setState(() {
           _loadApplications();
         });
+        // Need to wait for the future to complete
+        await _applicationsFuture;
       },
       child:
           applications.isEmpty
@@ -262,171 +292,190 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
-      shape: theme.cardTheme.shape,
-      elevation: theme.cardTheme.elevation,
+      shape:
+          theme.cardTheme.shape ??
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+      elevation: theme.cardTheme.elevation ?? 2.0,
       shadowColor:
           theme.brightness == Brightness.light
               ? Colors.black.withOpacity(0.1)
               : Colors.black.withOpacity(0.3),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ApplicationDetailScreen()),
-          ).then((_) {
-            // Refresh applications when returning from detail screen
-            setState(() {
-              _loadApplications();
-            });
-          });
-        },
+        onTap: () => _navigateToApplicationDetail(application),
         borderRadius: BorderRadius.circular(16.0),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          application.job?.title ?? 'Job Title',
-                          style: theme.textTheme.headlineSmall,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.business,
-                              size: 16,
-                              color: AppTheme.subtitleColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                application.job?.company ?? 'Company',
-                                style: theme.textTheme.bodyMedium!.copyWith(
+              // FIX 1: Replaced Row with intrinsic height
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // FIX 2: Wrap the Expanded in a container with width constraint
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            application.job?.title ?? 'Job Title',
+                            style: theme.textTheme.headlineSmall,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 8),
+                          // FIX 3: Replaced inner Row with IntrinsicHeight
+                          IntrinsicHeight(
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.business,
+                                  size: 16,
                                   color: AppTheme.subtitleColor,
                                 ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                                const SizedBox(width: 4),
+                                // FIX 4: Limited the max width of the Text
+                                Expanded(
+                                  child: Text(
+                                    application.job?.company ?? 'Company',
+                                    style: theme.textTheme.bodyMedium!.copyWith(
+                                      color: AppTheme.subtitleColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: statusColor.withOpacity(0.5),
-                        width: 1,
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(statusIcon, size: 14, color: statusColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          application.statusLabel,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: statusColor.withOpacity(0.5),
+                          width: 1,
                         ),
-                      ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, size: 14, color: statusColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            application.statusLabel,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               const Divider(height: 1),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _isRecruiter
-                      ? Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: AppTheme.accentColor,
-                            child: Text(
-                              application.applicant?.username
-                                      .substring(0, 1)
-                                      .toUpperCase() ??
-                                  'A',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+              // FIX 5: Use IntrinsicHeight for the bottom Row
+              IntrinsicHeight(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _isRecruiter
+                        ? IntrinsicWidth(
+                          // FIX 6: Added IntrinsicWidth
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: AppTheme.accentColor,
+                                child: Text(
+                                  application.applicant != null &&
+                                          application
+                                              .applicant!
+                                              .username
+                                              .isNotEmpty
+                                      ? application.applicant!.username
+                                          .substring(0, 1)
+                                          .toUpperCase()
+                                      : 'A',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            application.applicant?.username ?? 'Applicant',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      )
-                      : Row(
-                        children: [
-                          const Icon(
-                            Icons.description_outlined,
-                            size: 18,
-                            color: AppTheme.accentColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              application.resume?.owner?.username ?? 'Resume',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color:
-                                    theme.brightness == Brightness.light
-                                        ? AppTheme.textColor
-                                        : Colors.white,
+                              const SizedBox(width: 8),
+                              Text(
+                                application.applicant?.username ?? 'Applicant',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            ],
                           ),
-                        ],
+                        )
+                        : IntrinsicWidth(
+                          // FIX 7: Added IntrinsicWidth
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.description_outlined,
+                                size: 18,
+                                color: AppTheme.accentColor,
+                              ),
+                              const SizedBox(width: 4),
+                              // FIX 8: Removed Flexible and used a limited width Container
+                              Container(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 120,
+                                ),
+                                child: Text(
+                                  application.resume?.owner?.username ??
+                                      'Resume',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color:
+                                        theme.brightness == Brightness.light
+                                            ? AppTheme.textColor
+                                            : Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
                       ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      decoration: BoxDecoration(
+                        color:
+                            theme.brightness == Brightness.light
+                                ? AppTheme.lightBackgroundColor
+                                : AppTheme.darkBackgroundColor.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        application.formattedDate,
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ),
-                    decoration: BoxDecoration(
-                      color:
-                          theme.brightness == Brightness.light
-                              ? AppTheme.lightBackgroundColor
-                              : AppTheme.darkBackgroundColor.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      application.formattedDate,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

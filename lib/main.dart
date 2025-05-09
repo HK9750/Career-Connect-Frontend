@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:frontend/screens/applications/recruiter_application_screen.dart';
 import 'package:frontend/screens/jobs/create_job_screen.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
@@ -60,6 +61,8 @@ class MyApp extends StatelessWidget {
               '/jobs/detail': (context) => const JobDetailScreen(),
               '/create-job': (context) => const CreateJobScreen(),
               '/applications': (context) => const ApplicationListScreen(),
+              '/recruiters-application':
+                  (context) => const RecruiterApplicationsScreen(),
               '/applications/detail':
                   (context) => const ApplicationDetailScreen(),
             },

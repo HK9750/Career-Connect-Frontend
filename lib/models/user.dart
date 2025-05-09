@@ -27,10 +27,10 @@ class User {
     String? refreshToken,
   }) {
     return User(
-      id: json['id'],
-      username: json['username'],
-      email: json['email'],
-      role: json['role'],
+      id: json['id'] ?? 0,
+      username: json['username'] ?? '',
+      email: json['email'] ?? '',
+      role: json['role'] ?? '',
       accessToken: accessToken ?? json['accessToken'] ?? '',
       refreshToken: refreshToken ?? json['refreshToken'] ?? '',
       createdAt:

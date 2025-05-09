@@ -264,9 +264,15 @@ class ApiService {
         throw ApiException('No resumes found for the user.', 404);
       }
 
-      return (data['resumes'] as List)
-          .map((json) => Resume.fromJson(json))
-          .toList();
+      return (data['resumes'] as List).map((json) {
+        try {
+          return Resume.fromJson(json);
+        } catch (e, stack) {
+          print('Error parsing resume JSON: $json');
+          print('Error details: $e\n$stack');
+          throw ApiException('Failed to parse resume: $e', 500);
+        }
+      }).toList();
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -923,6 +929,9 @@ class ApiService {
         response,
         retryFunction: fetchFunction,
       );
+
+      final logging = Application.fromJson(data['application']);
+      AppLogger.i('Application data: $logging');
 
       return Application.fromJson(data['application']);
     } on ApiException {
