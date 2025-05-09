@@ -1,6 +1,7 @@
 import "../models/user.dart";
 import "../models/job.dart";
 import "../models/resume.dart";
+import "dart:convert";
 
 class Analysis {
   final int id;
@@ -8,7 +9,7 @@ class Analysis {
   final int? jobId;
   final String? jdText;
   final double? score;
-  final String? feedback;
+  final String? feedback; // Raw JSON string
   final int applicantId;
   final DateTime createdAt;
   final Resume? resume;
@@ -63,5 +64,16 @@ class Analysis {
       'job': job?.toJson(),
       'applicant': applicant?.toJson(),
     };
+  }
+
+  // Parse the feedback JSON string into a Map
+  Map<String, dynamic>? parsedFeedback() {
+    if (feedback == null || feedback!.isEmpty) return null;
+    try {
+      return jsonDecode(feedback!) as Map<String, dynamic>;
+    } catch (e) {
+      print('Error parsing feedback JSON: $e');
+      return null;
+    }
   }
 }

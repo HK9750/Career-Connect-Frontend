@@ -14,6 +14,13 @@ import '../models/job.dart';
 import '../models/review.dart';
 import '../models/application.dart';
 
+class ApplicationResponse {
+  final Application application;
+  final int resumeId;
+
+  ApplicationResponse({required this.application, required this.resumeId});
+}
+
 class ApiService {
   String? accessToken;
   String? refreshToken;
@@ -542,7 +549,10 @@ class ApiService {
   }
 
   // ANALYSIS METHODS
-  Future<Map<String, dynamic>> analyzeResume(String resumeId) async {
+  Future<Map<String, dynamic>> analyzeResume(
+    String resumeId,
+    String jobId,
+  ) async {
     try {
       final fetchFunction = () async {
         final uri = Uri.parse(
@@ -882,7 +892,7 @@ class ApiService {
   }
 
   // APPLICATION METHODS
-  Future<Application> applyForJob(String jobId) async {
+  Future<ApplicationResponse> applyForJob(String jobId) async {
     try {
       final fetchFunction = () async {
         final uri = Uri.parse(
@@ -890,7 +900,10 @@ class ApiService {
         );
         final response = await http.post(uri, headers: await _headers());
         final data = await _handleResponse(response);
-        return Application.fromJson(data['application']);
+        return ApplicationResponse(
+          application: Application.fromJson(data['application']),
+          resumeId: data['resumeId'],
+        );
       };
 
       final uri = Uri.parse(ApiRoutes.applyForJob.replaceAll('{jobId}', jobId));
@@ -901,7 +914,10 @@ class ApiService {
         retryFunction: fetchFunction,
       );
 
-      return Application.fromJson(data['application']);
+      return ApplicationResponse(
+        application: Application.fromJson(data['application']),
+        resumeId: data['resumeId'],
+      );
     } on ApiException {
       rethrow;
     } catch (e) {

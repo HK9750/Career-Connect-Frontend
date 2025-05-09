@@ -17,7 +17,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   late Future<Job> _jobFuture;
   final ApiService _apiService = ApiService();
   bool _isApplying = false;
+  bool _isAnalyzing = false;
   int? jobId;
+  int? resumeId;
+  Map<String, dynamic>? _analysisResult;
 
   @override
   void didChangeDependencies() {
@@ -46,8 +49,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     });
 
     try {
-      await _apiService.applyForJob(jobId.toString());
-
+      final response = await _apiService.applyForJob(jobId.toString());
+      resumeId = response.resumeId;
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -56,6 +59,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           backgroundColor: AppTheme.successColor,
         ),
       );
+
+      // Now perform the resume analysis with the jobId and resumeId
+      await _analyzeResume();
 
       // Navigate to application detail
       Navigator.push(
@@ -75,6 +81,41 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       if (mounted) {
         setState(() {
           _isApplying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _analyzeResume() async {
+    if (jobId == null || resumeId == null) return;
+
+    setState(() {
+      _isAnalyzing = true;
+    });
+
+    try {
+      _analysisResult = await _apiService.analyzeResume(
+        resumeId.toString(),
+        jobId.toString(),
+      );
+      if (!mounted) return;
+
+      // You can handle the analysis result here
+      // For example, show a dialog with the results or store it for later use
+      print('Resume analysis completed: $_analysisResult');
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Resume analysis failed: ${e.toString()}'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
         });
       }
     }
@@ -246,6 +287,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Widget _buildApplyButton() {
+    final bool isLoading = _isApplying || _isAnalyzing;
+    String buttonText = 'Apply Now';
+
+    if (_isApplying) {
+      buttonText = 'Applying...';
+    } else if (_isAnalyzing) {
+      buttonText = 'Analyzing Resume...';
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -259,10 +309,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: _isApplying ? null : _applyForJob,
+        onPressed: isLoading ? null : _applyForJob,
         style: Theme.of(context).elevatedButtonTheme.style,
         child:
-            _isApplying
+            isLoading
                 ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -275,10 +325,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text('Applying...'),
+                    Text(buttonText),
                   ],
                 )
-                : const Text('Apply Now'),
+                : Text(buttonText),
       ),
     );
   }
