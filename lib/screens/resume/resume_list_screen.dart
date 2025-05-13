@@ -32,7 +32,6 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
       final List<Resume> fetched = await _apiService.fetchResumesByUser();
 
       // Debug print to see the raw response
-      print('API Response received: ${fetched.length} resumes');
       if (fetched.isNotEmpty) {
         print('First resume: ${fetched.first.toString()}');
       }
@@ -41,8 +40,6 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
       AppLogger.i('Fetched resumes: ${_resumes.length}');
     } catch (e, stackTrace) {
       // Improved error logging with stack trace
-      print('Error fetching resumes: $e');
-      print('Stack trace: $stackTrace');
 
       ScaffoldMessenger.of(
         context,

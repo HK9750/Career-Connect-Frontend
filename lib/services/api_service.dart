@@ -552,20 +552,34 @@ class ApiService {
   Future<Map<String, dynamic>> analyzeResume(
     String resumeId,
     String jobId,
+    String applicationId,
   ) async {
     try {
+      // define the retry function with body as well
       final fetchFunction = () async {
         final uri = Uri.parse(
           ApiRoutes.analyze.replaceAll('{resumeId}', resumeId),
         );
-        final response = await http.post(uri, headers: await _headers());
+        final headers = await _headers();
+        headers['Content-Type'] = 'application/json';
+        final response = await http.post(
+          uri,
+          headers: headers,
+          body: jsonEncode({'jobId': jobId, 'applicationId': applicationId}),
+        );
         return await _handleResponse(response);
       };
 
       final uri = Uri.parse(
         ApiRoutes.analyze.replaceAll('{resumeId}', resumeId),
       );
-      final response = await http.post(uri, headers: await _headers());
+      final headers = await _headers();
+      headers['Content-Type'] = 'application/json';
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: jsonEncode({'jobId': jobId, 'applicationId': applicationId}),
+      );
 
       return await _handleResponse(response, retryFunction: fetchFunction);
     } on ApiException {
@@ -739,37 +753,18 @@ class ApiService {
     }
   }
 
-  // REVIEW METHODS
-  Future<Review> submitReview(String resumeId, String comment) async {
+  Future<Review> submitReview(String applicationId, String comment) async {
     try {
-      final fetchFunction = () async {
-        final uri = Uri.parse(
-          ApiRoutes.submitReview.replaceAll('{resumeId}', resumeId),
-        );
-        final response = await http.post(
-          uri,
-          headers: await _headers(),
-          body: json.encode({'comment': comment}),
-        );
-        final data = await _handleResponse(response);
-        return Review.fromJson(data['review']);
-      };
-
       final uri = Uri.parse(
-        ApiRoutes.submitReview.replaceAll('{resumeId}', resumeId),
+        ApiRoutes.submitReview.replaceAll('{applicationId}', applicationId),
       );
       final response = await http.post(
         uri,
         headers: await _headers(),
         body: json.encode({'comment': comment}),
       );
-
-      final data = await _handleResponse(
-        response,
-        retryFunction: fetchFunction,
-      );
-
-      return Review.fromJson(data['review']);
+      final body = await _handleResponse(response);
+      return Review.fromJson(body['data']);
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -777,61 +772,49 @@ class ApiService {
     }
   }
 
-  Future<List<Review>> fetchReviews(String resumeId) async {
+  Future<Review> updateReview(String applicationId, String comment) async {
     try {
-      final fetchFunction = () async {
-        final uri = Uri.parse(
-          ApiRoutes.listReviews.replaceAll('{resumeId}', resumeId),
-        );
-        final response = await http.get(uri, headers: await _headers());
-        final data = await _handleResponse(response);
-        return (data['reviews'] as List)
-            .map((json) => Review.fromJson(json))
-            .toList();
-      };
-
       final uri = Uri.parse(
-        ApiRoutes.listReviews.replaceAll('{resumeId}', resumeId),
+        ApiRoutes.updateReview.replaceAll('{applicationId}', applicationId),
       );
-      final response = await http.get(uri, headers: await _headers());
-
-      final data = await _handleResponse(
-        response,
-        retryFunction: fetchFunction,
+      final response = await http.put(
+        uri,
+        headers: await _headers(),
+        body: json.encode({'comment': comment}),
       );
-
-      return (data['reviews'] as List)
-          .map((json) => Review.fromJson(json))
-          .toList();
+      final body = await _handleResponse(response);
+      return Review.fromJson(body['data']);
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('Failed to load reviews: $e', 500);
+      throw ApiException('Failed to update review: $e', 500);
     }
   }
 
-  Future<Review> deleteReview(String reviewId) async {
+  // Fetch a single review by applicationId
+  Future<Review> fetchReview(String applicationId) async {
     try {
-      final fetchFunction = () async {
-        final uri = Uri.parse(
-          ApiRoutes.deleteReview.replaceAll('{reviewId}', reviewId),
-        );
-        final response = await http.delete(uri, headers: await _headers());
-        final data = await _handleResponse(response);
-        return Review.fromJson(data['review']);
-      };
-
       final uri = Uri.parse(
-        ApiRoutes.deleteReview.replaceAll('{reviewId}', reviewId),
+        ApiRoutes.getOneReview.replaceAll('{applicationId}', applicationId),
+      );
+      final response = await http.get(uri, headers: await _headers());
+      final body = await _handleResponse(response);
+      return Review.fromJson(body['data']);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to load review: $e', 500);
+    }
+  }
+
+  // Delete a review (only the recruiter who wrote it)
+  Future<void> deleteReview(String applicationId) async {
+    try {
+      final uri = Uri.parse(
+        ApiRoutes.deleteOneReview.replaceAll('{applicationId}', applicationId),
       );
       final response = await http.delete(uri, headers: await _headers());
-
-      final data = await _handleResponse(
-        response,
-        retryFunction: fetchFunction,
-      );
-
-      return Review.fromJson(data['review']);
+      await _handleResponse(response);
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -839,30 +822,13 @@ class ApiService {
     }
   }
 
+  // (Optional) Fetch all reviews—e.g. for an admin dashboard
   Future<List<Review>> fetchAllReviews() async {
     try {
-      final fetchFunction = () async {
-        final response = await http.get(
-          Uri.parse(ApiRoutes.review),
-          headers: await _headers(),
-        );
-        final data = await _handleResponse(response);
-        return (data['reviews'] as List)
-            .map((json) => Review.fromJson(json))
-            .toList();
-      };
-
-      final response = await http.get(
-        Uri.parse(ApiRoutes.review),
-        headers: await _headers(),
-      );
-
-      final data = await _handleResponse(
-        response,
-        retryFunction: fetchFunction,
-      );
-
-      return (data['reviews'] as List)
+      final uri = Uri.parse(ApiRoutes.listAllReview);
+      final response = await http.get(uri, headers: await _headers());
+      final body = await _handleResponse(response);
+      return (body['data'] as List)
           .map((json) => Review.fromJson(json))
           .toList();
     } on ApiException {

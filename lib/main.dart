@@ -16,6 +16,8 @@ import 'screens/jobs/job_list_screen.dart';
 import 'screens/jobs/job_detail_screen.dart';
 import 'screens/applications/application_list_screen.dart';
 import 'screens/applications/application_detail_screen.dart';
+import 'screens/analysis/application_analysis_screen.dart';
+import 'screens/reviews/recruiter_review_screen.dart';
 import 'utils/theme.dart';
 
 Future<void> main() async {
@@ -65,6 +67,16 @@ class MyApp extends StatelessWidget {
                   (context) => const RecruiterApplicationsScreen(),
               '/applications/detail':
                   (context) => const ApplicationDetailScreen(),
+              '/applications/analysis': (context) {
+                final appId =
+                    ModalRoute.of(context)!.settings.arguments as String;
+                return ApplicationAnalysisScreen(applicationId: appId);
+              },
+              '/applications/review':
+                  (context) => RecruiterReviewScreen(
+                    applicationId:
+                        ModalRoute.of(context)!.settings.arguments as String,
+                  ),
             },
           );
         },

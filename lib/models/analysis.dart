@@ -9,7 +9,7 @@ class Analysis {
   final int? jobId;
   final String? jdText;
   final double? score;
-  final String? feedback; // Raw JSON string
+  final String feedback; // Raw JSON string
   final int applicantId;
   final DateTime createdAt;
   final Resume? resume;
@@ -22,7 +22,7 @@ class Analysis {
     this.jobId,
     this.jdText,
     this.score,
-    this.feedback,
+    required this.feedback,
     required this.applicantId,
     required this.createdAt,
     this.resume,

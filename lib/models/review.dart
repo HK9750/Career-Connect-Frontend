@@ -1,38 +1,41 @@
 import "../models/user.dart";
-import "../models/resume.dart";
+import "../models/application.dart";
 
 class Review {
   final int id;
   final String comment;
-  final int resumeId;
-  final int reviewerId;
+  final int applicationId;
+  final int recruiterId;
   final DateTime createdAt;
-  final Resume? resume;
-  final User? reviewer;
+  final Application? application;
+  final User? recruiter;
 
   Review({
     required this.id,
     required this.comment,
-    required this.resumeId,
-    required this.reviewerId,
+    required this.applicationId,
+    required this.recruiterId,
     required this.createdAt,
-    this.resume,
-    this.reviewer,
+    this.application,
+    this.recruiter,
   });
 
   factory Review.fromJson(Map<String, dynamic> json) {
     return Review(
       id: json['id'],
       comment: json['comment'],
-      resumeId: json['resumeId'],
-      reviewerId: json['reviewerId'],
+      applicationId: json['applicationId'],
+      recruiterId: json['recruiterId'],
       createdAt:
           json['createdAt'] != null
               ? DateTime.parse(json['createdAt'])
               : DateTime.now(),
-      resume: json['resume'] != null ? Resume.fromJson(json['resume']) : null,
-      reviewer:
-          json['reviewer'] != null ? User.fromJson(json['reviewer']) : null,
+      application:
+          json['application'] != null
+              ? Application.fromJson(json['application'])
+              : null,
+      recruiter:
+          json['recruiter'] != null ? User.fromJson(json['recruiter']) : null,
     );
   }
 
@@ -40,11 +43,11 @@ class Review {
     return {
       'id': id,
       'comment': comment,
-      'resumeId': resumeId,
-      'reviewerId': reviewerId,
+      'applicationId': applicationId,
+      'recruiterId': recruiterId,
       'createdAt': createdAt.toIso8601String(),
-      'resume': resume?.toJson(),
-      'reviewer': reviewer?.toJson(),
+      'application': application?.toJson(),
+      'recruiter': recruiter?.toJson(),
     };
   }
 }

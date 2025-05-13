@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/utils/logger.dart';
 import 'package:frontend/utils/theme.dart';
 import '../../models/job.dart';
 import '../../services/api_service.dart';
@@ -20,6 +21,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   bool _isAnalyzing = false;
   int? jobId;
   int? resumeId;
+  int? applicationId;
   Map<String, dynamic>? _analysisResult;
 
   @override
@@ -51,6 +53,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     try {
       final response = await _apiService.applyForJob(jobId.toString());
       resumeId = response.resumeId;
+      AppLogger.i("Application: ${response.application}");
+      applicationId = response.application.id;
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -61,7 +65,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       );
 
       // Now perform the resume analysis with the jobId and resumeId
-      await _analyzeResume();
+      await _analyzeResume(applicationId);
 
       // Navigate to application detail
       Navigator.push(
@@ -86,7 +90,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
-  Future<void> _analyzeResume() async {
+  Future<void> _analyzeResume(int? applicationId) async {
     if (jobId == null || resumeId == null) return;
 
     setState(() {
@@ -94,9 +98,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     });
 
     try {
+      AppLogger.i(
+        'Analyzing resume with ID: $resumeId for job ID: $jobId and application ID: $applicationId',
+      );
       _analysisResult = await _apiService.analyzeResume(
         resumeId.toString(),
         jobId.toString(),
+        applicationId.toString(),
       );
       if (!mounted) return;
 

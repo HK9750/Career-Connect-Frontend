@@ -27,10 +27,12 @@ class ApiRoutes {
   static const analysis = '${Constants.baseUrl}/analysis';
   static const analyze = '$analysis/analyze/{resumeId}';
 
-  static const review = '${Constants.baseUrl}/review';
-  static const submitReview = '$review/{resumeId}';
-  static const listReviews = '$review/{resumeId}';
-  static const deleteReview = '$review/{reviewId}';
+  static const _base = '${Constants.baseUrl}/review/application';
+  static const submitReview = '$_base/{applicationId}/review';
+  static const updateReview = '$_base/{applicationId}/review-update';
+  static const getOneReview = '$_base/{applicationId}/review';
+  static const deleteOneReview = '$_base/{applicationId}/review';
+  static const listAllReview = '${Constants.baseUrl}/reviews';
 
   static const application = '${Constants.baseUrl}/application';
   static const applyForJob = '$application/apply/{jobId}';

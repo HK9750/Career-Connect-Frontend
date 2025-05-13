@@ -487,7 +487,7 @@ class _RecruiterApplicationsScreenState
             if (entry.value == 0) return const SizedBox.shrink();
 
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 color: _getStatusColor(entry.key).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
@@ -643,16 +643,17 @@ class _RecruiterApplicationsScreenState
   Widget _buildApplicationCard(Application application) {
     final applicant = application.applicant;
     final resume = application.resume;
+    final applicationId = application.id;
 
     if (applicant == null || resume == null) {
       return Card(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Text(
                 'Missing applicant or resume data',
                 style: TextStyle(color: AppTheme.errorColor),
@@ -664,17 +665,17 @@ class _RecruiterApplicationsScreenState
     }
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(
           color: _getStatusColor(application.status).withOpacity(0.3),
           width: 1,
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(18.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -709,7 +710,7 @@ class _RecruiterApplicationsScreenState
                             ?.copyWith(fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Icon(
@@ -717,7 +718,7 @@ class _RecruiterApplicationsScreenState
                             size: 14,
                             color: AppTheme.subtitleColor,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               applicant.email,
@@ -728,7 +729,7 @@ class _RecruiterApplicationsScreenState
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
                         'Applied on: ${_formatDate(application.createdAt)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -739,10 +740,13 @@ class _RecruiterApplicationsScreenState
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 _buildStatusButton(application),
               ],
             ),
-            const Divider(height: 24),
+
+            const Divider(height: 28),
+
             Row(
               children: [
                 Icon(
@@ -750,7 +754,7 @@ class _RecruiterApplicationsScreenState
                   size: 16,
                   color: AppTheme.accentColor,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     resume.title ?? "Untitled Resume",
@@ -762,21 +766,22 @@ class _RecruiterApplicationsScreenState
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 18),
+
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Navigate to resume detail screen
                       Navigator.pushNamed(
                         context,
-                        '/resume-detail',
-                        arguments: resume.id,
+                        '/applications/analysis',
+                        arguments: applicationId.toString(),
                       );
                     },
                     icon: const Icon(Icons.description, size: 18),
-                    label: const Text('View Resume'),
+                    label: const Text('Analysis'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.accentColor,
                       foregroundColor: Colors.white,
@@ -787,31 +792,28 @@ class _RecruiterApplicationsScreenState
                     ),
                   ),
                 ),
-                if (application.analysisId != null) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Navigate to analysis detail screen
-                        Navigator.pushNamed(
-                          context,
-                          '/analysis-detail',
-                          arguments: application.analysisId,
-                        );
-                      },
-                      icon: const Icon(Icons.analytics, size: 18),
-                      label: const Text('View Analysis'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.primaryColor,
-                        side: BorderSide(color: AppTheme.primaryColor),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/applications/review',
+                        arguments: applicationId.toString(),
+                      );
+                    },
+                    icon: const Icon(Icons.description, size: 18),
+                    label: const Text('Review'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
-                ],
+                ),
               ],
             ),
           ],

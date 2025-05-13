@@ -292,12 +292,6 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                             const SizedBox(height: 24),
                           ],
 
-                          // Additional Info
-                          _buildAdditionalInfo(app),
-
-                          // Footer space
-                          const SizedBox(height: 32),
-
                           // Withdraw button for applicants
                           if (!_isRecruiter)
                             Center(
@@ -554,49 +548,6 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                   icon: Icons.cancel,
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdditionalInfo(Application app) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.withOpacity(0.2)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.description, color: AppTheme.accentColor),
-                const SizedBox(width: 8),
-                Text(
-                  'Cover Letter',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color:
-                    Theme.of(context).cardTheme.color?.withOpacity(0.5) ??
-                    Colors.white.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.withOpacity(0.2)),
-              ),
-              child: Text(
-                app.coverLetter ?? 'No cover letter provided.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
             ),
           ],
         ),
