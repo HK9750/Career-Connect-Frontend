@@ -791,18 +791,33 @@ class ApiService {
     }
   }
 
-  // Fetch a single review by applicationId
   Future<Review> fetchReview(String applicationId) async {
     try {
       final uri = Uri.parse(
         ApiRoutes.getOneReview.replaceAll('{applicationId}', applicationId),
       );
+
+      // Add debug log to see what URL we're requesting
+      AppLogger.d('Fetching review from: $uri');
+
       final response = await http.get(uri, headers: await _headers());
+
+      // Log the raw response
+      AppLogger.d('Raw response status: ${response.statusCode}');
+      AppLogger.d('Raw response body: ${response.body}');
+
       final body = await _handleResponse(response);
+
+      // Log the parsed body
+      AppLogger.i('Review response parsed body: ${body['data']}');
+
+      // Create review object with more defensive parsing
       return Review.fromJson(body['data']);
     } on ApiException {
       rethrow;
     } catch (e) {
+      // More descriptive error message
+      AppLogger.e('Error in fetchReview: $e');
       throw ApiException('Failed to load review: $e', 500);
     }
   }
@@ -828,6 +843,9 @@ class ApiService {
       final uri = Uri.parse(ApiRoutes.listAllReview);
       final response = await http.get(uri, headers: await _headers());
       final body = await _handleResponse(response);
+      final data =
+          (body['data'] as List).map((json) => Review.fromJson(json)).toList();
+      AppLogger.i('Fetched all reviews: $data');
       return (body['data'] as List)
           .map((json) => Review.fromJson(json))
           .toList();

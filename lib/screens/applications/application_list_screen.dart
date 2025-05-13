@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/utils/theme.dart';
 import '../../models/application.dart';
+import '../../models/review.dart';
 import '../../services/api_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/error_view.dart';
@@ -79,6 +80,153 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
         _loadApplications();
       });
     });
+  }
+
+  // Add a method to show review details
+  Future<void> _showReviewDetails(String applicationId) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LoadingIndicator(),
+                SizedBox(height: 16),
+                Text('Loading review...'),
+              ],
+            ),
+          ),
+    );
+
+    try {
+      // Add debug logging
+      print('Fetching review for application ID: $applicationId');
+
+      // Fetch the review
+      final Review review = await _apiService.fetchReview(applicationId);
+
+      // Add debug logging
+      print('Successfully fetched review: ${review.comment}');
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show review details dialog
+      showDialog(
+        context: context,
+        builder: (context) => _buildReviewDialog(review),
+      );
+    } catch (e) {
+      // Add debug logging
+      print('Error fetching review: $e');
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Error'),
+              content: Text('Failed to load review: ${e.toString()}'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+      );
+    }
+  }
+
+  // Build the review dialog
+  Widget _buildReviewDialog(Review review) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: const Text('Review Details'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Reviewer info
+            if (review.recruiter != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AppTheme.accentColor,
+                      child: Text(
+                        review.recruiter!.username.isNotEmpty
+                            ? review.recruiter!.username
+                                .substring(0, 1)
+                                .toUpperCase()
+                            : 'R',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Reviewed by: ${review.recruiter!.username}',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+              ),
+
+            // Comment
+            Text('Comment:', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    theme.brightness == Brightness.light
+                        ? AppTheme.lightBackgroundColor
+                        : AppTheme.darkBackgroundColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: Text(
+                review.comment ?? 'No comment provided',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+
+            // Review date
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  'Reviewed on: ${review.createdAt.toLocal().toString().split(' ')[0]}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -385,6 +533,37 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Add Show Review button for REVIEWED applications
+              if (application.status == 'REVIEWED')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      if (application.id != null) {
+                        _showReviewDetails(application.id.toString());
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Application ID is missing'),
+                            backgroundColor: AppTheme.errorColor,
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.rate_review, size: 18),
+                    label: const Text('Show Review'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.warningColor,
+                      side: const BorderSide(color: AppTheme.warningColor),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                ),
+
               const Divider(height: 1),
               const SizedBox(height: 16),
               // FIX 5: Use IntrinsicHeight for the bottom Row

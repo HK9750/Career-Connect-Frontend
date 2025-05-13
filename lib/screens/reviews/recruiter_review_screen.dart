@@ -58,7 +58,7 @@ class _RecruiterReviewScreenState extends State<RecruiterReviewScreen> {
         final review = await _apiService.fetchReview(widget.applicationId);
         setState(() {
           _review = review;
-          _commentController.text = review.comment;
+          _commentController.text = review.comment!;
         });
       } catch (e) {
         // No review exists yet, which is fine
@@ -564,7 +564,7 @@ class _RecruiterReviewScreenState extends State<RecruiterReviewScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Text(
-                            'Last updated: ${_formatDate(_review!.createdAt)}',
+                            'Last updated: ${_formatDate(_review!.createdAt ?? DateTime.now())}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(fontStyle: FontStyle.italic),
                             textAlign: TextAlign.start,
@@ -608,7 +608,7 @@ class _RecruiterReviewScreenState extends State<RecruiterReviewScreen> {
                     if (isEditing)
                       Flexible(
                         child: Text(
-                          'Last updated: ${_formatDate(_review!.createdAt)}',
+                          'Last updated: ${_formatDate(_review!.createdAt ?? DateTime.now())}',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(fontStyle: FontStyle.italic),
                           overflow: TextOverflow.ellipsis,
