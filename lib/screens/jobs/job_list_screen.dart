@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/utils/logger.dart';
 import 'package:frontend/utils/theme.dart';
+import 'package:provider/provider.dart';
 import '../../models/job.dart';
 import '../../services/api_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/error_view.dart';
+import '../../services/auth_provider.dart';
 import 'job_detail_screen.dart';
+import 'update_job_screen.dart';
 
 class JobListScreen extends StatefulWidget {
   const JobListScreen({Key? key}) : super(key: key);
@@ -134,6 +138,9 @@ class _JobListScreenState extends State<JobListScreen> {
   }
 
   Widget _buildJobCard(Job job) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isRecruiter =
+        authProvider.isAuthenticated && authProvider.user?.role == 'RECRUITER';
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: InkWell(
@@ -168,11 +175,32 @@ class _JobListScreenState extends State<JobListScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: AppTheme.accentColor,
-                  ),
+                  if (isRecruiter)
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: AppTheme.accentColor),
+                      onPressed: () {
+                        // Navigate to UpdateJobScreen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const UpdateJobScreen(),
+                            settings: RouteSettings(arguments: job.id),
+                          ),
+                        ).then((_) {
+                          // Refresh jobs list when returning from update screen
+                          setState(() {
+                            _loadJobs();
+                          });
+                        });
+                      },
+                      tooltip: 'Edit job',
+                    )
+                  else
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: AppTheme.accentColor,
+                    ),
                 ],
               ),
               const SizedBox(height: 8),

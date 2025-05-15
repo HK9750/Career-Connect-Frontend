@@ -113,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen>
                         const FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            "Resume Builder",
+                            "Career Connect",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 28,

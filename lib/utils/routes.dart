@@ -41,4 +41,6 @@ class ApiRoutes {
   static const getApplication = '$application/{applicationId}';
   static const updateApplicationStatus = '$application/{applicationId}/status';
   static const deleteApplication = '$application/{applicationId}';
+
+  static const dashboardInfo = '${Constants.baseUrl}/dashboard';
 }

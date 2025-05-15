@@ -118,7 +118,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 32),
                 const Text(
-                  "Resume Builder",
+                  "Career Connect",
                   style: TextStyle(
                     fontSize: 32,
                     color: Colors.white,
@@ -127,7 +127,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  "Create, manage, and share your resume",
+                  "Making career connections easier",
                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 const SizedBox(height: 60),

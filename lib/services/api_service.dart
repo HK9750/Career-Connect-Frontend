@@ -623,25 +623,24 @@ class ApiService {
 
   Future<Job> getJob(String jobId) async {
     try {
-      final fetchFunction = () async {
-        final uri = Uri.parse(ApiRoutes.jobDetail.replaceAll('{id}', jobId));
-        final response = await http.get(uri, headers: await _headers());
-        final data = await _handleResponse(response);
-        return Job.fromJson(data['job']);
-      };
+      AppLogger.d('Getting job details: $jobId'); // Add logging
 
       final uri = Uri.parse(ApiRoutes.jobDetail.replaceAll('{id}', jobId));
-      final response = await http.get(uri, headers: await _headers());
+      AppLogger.d('API URI: $uri'); // Log the URI
 
-      final data = await _handleResponse(
-        response,
-        retryFunction: fetchFunction,
-      );
+      final headers = await _headers();
+      AppLogger.d('Headers: $headers'); // Log headers
 
+      final response = await http.get(uri, headers: headers);
+      AppLogger.d('Response status: ${response.statusCode}'); // Log status code
+      AppLogger.d('Response body: ${response.body}'); // Log response body
+
+      final data = await _handleResponse(response);
       return Job.fromJson(data['job']);
     } on ApiException {
       rethrow;
     } catch (e) {
+      AppLogger.e('Error getting job: $e'); // Log the error
       throw ApiException('Failed to get job details: $e', 500);
     }
   }
@@ -1087,6 +1086,25 @@ class ApiService {
       rethrow;
     } catch (e) {
       throw ApiException('Failed to cancel application: $e', 500);
+    }
+  }
+
+  Future<Map<String, dynamic>> getDashboardInfo() async {
+    try {
+      final fetchFunction = () async {
+        final uri = Uri.parse(ApiRoutes.dashboardInfo);
+        final response = await http.get(uri, headers: await _headers());
+        return await _handleResponse(response);
+      };
+
+      final uri = Uri.parse(ApiRoutes.dashboardInfo);
+      final response = await http.get(uri, headers: await _headers());
+
+      return await _handleResponse(response, retryFunction: fetchFunction);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to fetch dashboard information: $e', 500);
     }
   }
 }

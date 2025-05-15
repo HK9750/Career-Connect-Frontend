@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/utils/logger.dart';
 import 'package:frontend/utils/theme.dart';
+import 'package:provider/provider.dart'; // Add this import
 import '../../models/job.dart';
 import '../../services/api_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/error_view.dart';
 import '../applications/application_list_screen.dart';
+import '../../services/auth_provider.dart'; // Add this import
 
 class JobDetailScreen extends StatefulWidget {
   const JobDetailScreen({Key? key}) : super(key: key);
@@ -131,6 +133,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Get the current user from AuthProvider
+    final authProvider = Provider.of<AuthProvider>(context);
+    final isRecruiter =
+        authProvider.isAuthenticated && authProvider.user?.role == 'RECRUITER';
+
     if (jobId == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Job Details')),
@@ -162,8 +169,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           }
         },
       ),
+      // Only show the Apply Now button if the user is NOT a recruiter
       bottomNavigationBar:
-          jobId != null
+          (jobId != null && !isRecruiter)
               ? FutureBuilder<Job>(
                 future: _jobFuture,
                 builder: (context, snapshot) {
