@@ -14,26 +14,27 @@ class ApplicationListScreen extends StatefulWidget {
   State<ApplicationListScreen> createState() => _ApplicationListScreenState();
 }
 
-class _ApplicationListScreenState extends State<ApplicationListScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ApplicationListScreenState extends State<ApplicationListScreen> {
   late Future<List<Application>> _applicationsFuture;
   final ApiService _apiService = ApiService();
+  String? _filterStatus;
 
   // User role - in a real app, you'd get this from a user service
   final bool _isRecruiter = false; // Change to test different views
 
+  // Status options for filtering
+  final List<String> _statusOptions = [
+    'ALL',
+    'APPLIED',
+    'REVIEWED',
+    'ACCEPTED',
+    'REJECTED',
+  ];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _loadApplications();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   void _loadApplications() {
@@ -44,11 +45,112 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
     }
   }
 
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.filter_list, color: AppTheme.primaryColor),
+              const SizedBox(width: 12),
+              const Text('Filter Applications'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.minPositive,
+            child: ListView(
+              shrinkWrap: true,
+              children:
+                  _statusOptions.map((status) {
+                    return RadioListTile<String>(
+                      title: Text(
+                        status,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      value: status,
+                      groupValue: _filterStatus ?? 'ALL',
+                      onChanged: (String? value) {
+                        Navigator.pop(context);
+                        setState(() {
+                          _filterStatus = value == 'ALL' ? null : value;
+                        });
+                      },
+                      activeColor:
+                          status == 'ALL'
+                              ? AppTheme.accentColor
+                              : _getStatusColor(status),
+                      secondary:
+                          status != 'ALL'
+                              ? Icon(
+                                _getStatusIcon(status),
+                                color: _getStatusColor(status),
+                              )
+                              : Icon(
+                                Icons.all_inclusive,
+                                color: AppTheme.accentColor,
+                              ),
+                    );
+                  }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                'CANCEL',
+                style: TextStyle(color: AppTheme.primaryColor),
+              ),
+            ),
+          ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        );
+      },
+    );
+  }
+
+  // Get color based on application status
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'APPLIED':
+        return AppTheme.accentColor;
+      case 'REVIEWED':
+        return AppTheme.warningColor;
+      case 'ACCEPTED':
+        return AppTheme.successColor;
+      case 'REJECTED':
+        return AppTheme.errorColor;
+      default:
+        return AppTheme.accentColor;
+    }
+  }
+
+  // Get icon based on application status
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'APPLIED':
+        return Icons.hourglass_bottom;
+      case 'REVIEWED':
+        return Icons.visibility;
+      case 'ACCEPTED':
+        return Icons.check_circle;
+      case 'REJECTED':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
   List<Application> _filterApplications(
     List<Application> applications,
-    String status,
+    String? status,
   ) {
-    if (status == 'ALL') {
+    if (status == null || status == 'ALL') {
       return applications;
     }
     return applications.where((app) => app.status == status).toList();
@@ -236,19 +338,38 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(_isRecruiter ? 'Received Applications' : 'My Applications'),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: AppTheme.secondaryColor,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Pending'),
-            Tab(text: 'Under Review'),
-            Tab(text: 'Completed'),
-          ],
-        ),
+        actions: [
+          // Add filter button to AppBar
+          Tooltip(
+            message: 'Filter Applications',
+            child: IconButton(
+              icon: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Icon(Icons.filter_list),
+                  if (_filterStatus != null)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(_filterStatus!),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 8,
+                          minHeight: 8,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              onPressed: _showFilterDialog,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: FutureBuilder<List<Application>>(
         future: _applicationsFuture,
@@ -268,17 +389,59 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
             return _buildEmptyState(theme);
           } else {
             final applications = snapshot.data!;
-            return TabBarView(
-              controller: _tabController,
+            return Column(
               children: [
-                _buildApplicationList(_filterApplications(applications, 'ALL')),
-                _buildApplicationList(
-                  _filterApplications(applications, 'APPLIED'),
+                // Show filter indicator if filter is active
+                if (_filterStatus != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 16,
+                    ),
+                    color:
+                        theme.brightness == Brightness.light
+                            ? AppTheme.lightBackgroundColor
+                            : AppTheme.darkBackgroundColor,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getStatusIcon(_filterStatus!),
+                          size: 18,
+                          color: _getStatusColor(_filterStatus!),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Filtered by: $_filterStatus',
+                          style: theme.textTheme.bodyMedium!.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: _getStatusColor(_filterStatus!),
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _filterStatus = null;
+                            });
+                          },
+                          child: const Text('Clear'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Application list with filtering
+                Expanded(
+                  child: _buildApplicationList(
+                    _filterApplications(applications, _filterStatus),
+                  ),
                 ),
-                _buildApplicationList(
-                  _filterApplications(applications, 'REVIEWED'),
-                ),
-                _buildCompletedApplicationsView(applications),
               ],
             );
           }
@@ -316,44 +479,6 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
               icon: const Icon(Icons.work_outline),
               label: const Text('Browse Jobs'),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompletedApplicationsView(List<Application> applications) {
-    // Create a separate TabController for the nested tabs
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          Container(
-            color:
-                Theme.of(context).brightness == Brightness.light
-                    ? AppTheme.lightBackgroundColor
-                    : AppTheme.darkBackgroundColor,
-            child: TabBar(
-              labelColor:
-                  Theme.of(context).brightness == Brightness.light
-                      ? AppTheme.primaryColor
-                      : Colors.white,
-              unselectedLabelColor: AppTheme.subtitleColor,
-              indicatorColor: AppTheme.secondaryColor,
-              tabs: const [Tab(text: 'Accepted'), Tab(text: 'Rejected')],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildApplicationList(
-                  _filterApplications(applications, 'ACCEPTED'),
-                ),
-                _buildApplicationList(
-                  _filterApplications(applications, 'REJECTED'),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -397,12 +522,27 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              'No applications in this category',
+              _filterStatus != null
+                  ? 'No applications with status $_filterStatus'
+                  : 'No applications found',
               style: Theme.of(
                 context,
               ).textTheme.bodyLarge?.copyWith(color: AppTheme.subtitleColor),
               textAlign: TextAlign.center,
             ),
+            if (_filterStatus != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16.0),
+                child: TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _filterStatus = null;
+                    });
+                  },
+                  icon: const Icon(Icons.filter_alt_off),
+                  label: const Text('Clear Filter'),
+                ),
+              ),
           ],
         ),
       ),
@@ -413,30 +553,8 @@ class _ApplicationListScreenState extends State<ApplicationListScreen>
     final theme = Theme.of(context);
 
     // Colors for different status
-    Color statusColor;
-    IconData statusIcon;
-
-    switch (application.status) {
-      case 'APPLIED':
-        statusColor = AppTheme.accentColor;
-        statusIcon = Icons.hourglass_bottom;
-        break;
-      case 'REVIEWED':
-        statusColor = AppTheme.warningColor;
-        statusIcon = Icons.visibility;
-        break;
-      case 'ACCEPTED':
-        statusColor = AppTheme.successColor;
-        statusIcon = Icons.check_circle;
-        break;
-      case 'REJECTED':
-        statusColor = AppTheme.errorColor;
-        statusIcon = Icons.cancel;
-        break;
-      default:
-        statusColor = AppTheme.accentColor;
-        statusIcon = Icons.help_outline;
-    }
+    Color statusColor = _getStatusColor(application.status);
+    IconData statusIcon = _getStatusIcon(application.status);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
