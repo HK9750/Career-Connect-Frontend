@@ -126,12 +126,12 @@ class _ResumeListScreenState extends State<ResumeListScreen> {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap:
-                () => Navigator.pushNamed(
-                  context,
-                  '/resumes/detail',
-                  arguments: {'resumeId': resume.id.toString()},
-                ),
+            // onTap:
+            //     () => Navigator.pushNamed(
+            //       context,
+            //       '/resumes/detail',
+            //       arguments: {'resumeId': resume.id.toString()},
+            //     ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(

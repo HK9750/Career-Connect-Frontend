@@ -1,3 +1,3 @@
 class Constants {
-  static const String baseUrl = 'http://192.168.100.10:8000/api/v1';
+  static const String baseUrl = 'https://career-connect-backend-x5ku.onrender.com/api/v1';
 }
